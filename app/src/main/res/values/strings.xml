@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Floating Ghost Image</string>
+    <string name="back_button_desc">Back</string>
+    <string name="crop_icon_desc">Crop</string>
+    <string name="lock_icon_desc">Lock</string>
+    <string name="close_symbol">✕</string>
+    <string name="opacity_icon_desc">Opacity</string>
+</resources>

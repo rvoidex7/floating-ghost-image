@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:visibility="visible"
+    tools:context=".MainActivity">
+
+    <!-- Image preview: centered in screen -->
+    <ImageView
+        android:id="@+id/imgPreview"
+        android:layout_width="200dp"
+        android:layout_height="200dp"
+        android:scaleType="centerInside"
+        app:layout_constraintBottom_toTopOf="@id/appPanel"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:ignore="ContentDescription"
+        tools:srcCompat="@drawable/add_circle" />
+
+    <!-- Bottom app panel: semi-transparent black -->
+    <LinearLayout
+        android:id="@+id/appPanel"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Header section -->
+        <LinearLayout
+            android:id="@+id/header"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:orientation="vertical">
+
+            <!-- App name - centered -->
+            <TextView
+                android:id="@+id/txtAppName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:fontFamily="sans-serif-condensed"
+                android:text="@string/app_name"
+                android:textColor="@color/material_dynamic_neutral70"
+                android:textSize="34sp"
+                android:textStyle="bold" />
+
+            <!-- Left/Center/Right columns -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <!-- Left column: Overlay + Documentation buttons -->
+                <LinearLayout
+                    android:id="@+id/leftColumn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <!-- Documentation button -->
+                    <ImageButton
+                        android:id="@+id/btnDocumentation"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="Documentation"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@android:drawable/ic_dialog_info" />
+
+                    <ImageButton
+                        android:id="@+id/btnOverlaySettings"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="Overlay permission settings"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@android:drawable/ic_menu_manage" />
+
+                </LinearLayout>
+
+                <!-- Center block: App icon + version -->
+                <LinearLayout
+                    android:id="@+id/centerBlock"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="24dp"
+                    android:layout_marginEnd="24dp"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageView
+                        android:id="@+id/imgAppIcon"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@mipmap/ic_launcher"
+                        tools:ignore="ContentDescription" />
+
+                    <TextView
+                        android:id="@+id/txtVersion"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="v1.0"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp" />
+
+                </LinearLayout>
+
+                <!-- Right column: GitHub and Play Store buttons -->
+                <LinearLayout
+                    android:id="@+id/rightColumn"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:orientation="vertical">
+
+                    <ImageButton
+                        android:id="@+id/btnGithub"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="GitHub"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/github" />
+
+                    <ImageButton
+                        android:id="@+id/btnPlayStore"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="Play Store"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/playstore" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Single START/STOP button -->
+            <Button
+                android:id="@+id/btnStartFloatingService"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="8dp"
+                android:text="START"
+                android:textStyle="bold"
+                android:letterSpacing="0.1"
+                android:visibility="visible" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

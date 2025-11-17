@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="8dp"
+    android:background="#80000000">
+
+    <!-- Top row: Back button, lock group, close button -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- Left: back app icon -->
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@mipmap/ic_launcher"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/back_button_desc"
+            android:scaleType="centerInside"
+            android:padding="4dp" />
+
+        <!-- Spacer before lock group -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Center group: crop icon + switch + lock icon -->
+        <LinearLayout
+            android:id="@+id/lock_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@string/crop_icon_desc"
+                android:src="@android:drawable/ic_menu_crop"
+                app:tint="@android:color/white" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/lock_switch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:checked="false"
+                app:thumbTint="@android:color/white"
+                app:trackTint="#a9a7b2" />
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@string/lock_icon_desc"
+                android:src="@android:drawable/ic_lock_idle_lock"
+                app:tint="#a9a7b2" />
+        </LinearLayout>
+
+        <!-- Spacer after lock group -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Right: close button -->
+        <ImageButton
+            android:id="@+id/btn_close"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/close_symbol"
+            android:scaleType="centerInside"
+            android:padding="4dp" />
+    </LinearLayout>
+
+    <!-- Opacity row -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="bottom"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:contentDescription="@string/opacity_icon_desc"
+            android:src="@android:drawable/ic_menu_view"
+            app:tint="@android:color/white" />
+
+        <SeekBar
+            android:id="@+id/opacity_slider"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:max="100"
+            android:progress="100"
+            android:progressTint="#a9a7b2"
+            android:progressBackgroundTint="#000000"
+            android:thumbTint="#a9a7b2" />
+    </LinearLayout>
+
+</LinearLayout>
