@@ -3,8 +3,8 @@
 A lightweight Android overlay app that displays a semi-transparent reference image on top of other apps. Perfect for drawing, tracing, comparing images, or any task requiring a visual reference overlay.
 
 <p float="left">
-  <img src="https://github.com/user-attachments/assets/6ee74705-1e77-48a9-adac-10f9a8be6a88" width="45%" />
-  <img src="https://github.com/user-attachments/assets/05061cea-21a9-4185-9db9-5070f45305c4" width="45%" /> 
+  <img src="https://github.com/user-attachments/assets/e1182082-ac01-48ca-aa2c-736a721d0870" width="45%" /> 
+  <img src="https://github.com/user-attachments/assets/4b97c20d-b975-4fd4-9c53-18bbc432912e" width="45%" />
 </p>
 
 ## Features
