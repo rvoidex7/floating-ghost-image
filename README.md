@@ -24,9 +24,9 @@ A lightweight Android overlay app that displays a semi-transparent reference ima
 
 ## Installation
 
-
+<a href="https://play.google.com/store/apps/details?id=com.rvoidex7.floatingghostimage" target="_blank">
 <img width="199" height="77" alt="playstore(2)" src="https://github.com/user-attachments/assets/4b5b8a37-4552-49f6-af59-b5bf6b9a26ea" />
-
+</a>
 
 
 ## Usage
