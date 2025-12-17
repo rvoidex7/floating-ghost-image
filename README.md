@@ -24,9 +24,10 @@ A lightweight Android overlay app that displays a semi-transparent reference ima
 
 ## Installation
 
-1. Download the APK from [Releases](https://github.com/rvoidex7/floating-ghost-image/releases)
-2. Install the APK on your device
-3. Grant overlay permission when prompted
+
+<img width="199" height="77" alt="playstore(2)" src="https://github.com/user-attachments/assets/4b5b8a37-4552-49f6-af59-b5bf6b9a26ea" />
+
+
 
 ## Usage
 
