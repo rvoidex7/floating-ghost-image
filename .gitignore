@@ -108,7 +108,17 @@ DELETE_ME*
 TODO_DELETE*
 REMOVE_ME*
 
+# Local crash-analysis notes (internal only, never push)
+TODO.md
+
 # AI Assistant files
 .claude/
 .cursor/
 .aider/
+
+# repo2notebook
+_repo2notebook/
+repo2notebook.py
+
+# Local floating assets (branding, keystores — never commit)
+floatinggi/

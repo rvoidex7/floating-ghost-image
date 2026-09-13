@@ -50,7 +50,7 @@
                 android:layout_gravity="center_horizontal"
                 android:fontFamily="sans-serif-condensed"
                 android:text="@string/app_name"
-                android:textColor="@color/material_dynamic_neutral70"
+                android:textColor="#FF757575"
                 android:textSize="34sp"
                 android:textStyle="bold" />
 
@@ -116,7 +116,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="v1.0"
+                        android:text="v1.1"
                         android:textColor="@android:color/white"
                         android:textSize="12sp" />
 
