@@ -117,6 +117,15 @@ class MainActivity : AppCompatActivity() {
         )
         appPanel.background = inverseDrawable
 
+        // Center the logo vertically on the panel's visible top line (cornerRadius px
+        // below the panel's top edge), so half protrudes above and half stays below.
+        // The logo is a sibling of appPanel, so root-relative coordinates apply.
+        imgAppIcon.post {
+            val lineY = appPanel.top + 60f // visible edge: appPanel.top + cornerRadius px
+            val centerY = imgAppIcon.top + imgAppIcon.height / 2f
+            imgAppIcon.translationY = lineY - centerY
+        }
+
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val nb = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             appPanel?.updatePadding(bottom = nb.bottom)
