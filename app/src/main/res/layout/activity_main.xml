@@ -29,7 +29,7 @@
         android:clipToPadding="false"
         android:orientation="vertical"
         android:paddingHorizontal="16dp"
-        android:paddingTop="28dp"
+        android:paddingTop="0dp"
         android:paddingBottom="0dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
@@ -53,24 +53,24 @@
                 android:orientation="horizontal">
 
                 <ImageButton
-                    android:id="@+id/btnOverlaySettings"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="Overlay permission settings"
-                    android:padding="4dp"
-                    android:scaleType="centerInside"
-                    android:src="@android:drawable/ic_menu_manage" />
+                        android:id="@+id/btnOverlaySettings"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="Overlay permission settings"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@android:drawable/ic_menu_manage" android:visibility="visible"/>
 
                 <ImageButton
-                    android:id="@+id/btnDocumentation"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="Documentation"
-                    android:padding="4dp"
-                    android:scaleType="centerInside"
-                    android:src="@android:drawable/ic_dialog_info" />
+                        android:id="@+id/btnDocumentation"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="Documentation"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@android:drawable/ic_dialog_info" android:visibility="visible"/>
             </LinearLayout>
 
             <!-- App icon removed from the row; it now lives in root as a sibling of appPanel -->
@@ -84,24 +84,24 @@
                 android:orientation="horizontal">
 
                 <ImageButton
-                    android:id="@+id/btnGithub"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="GitHub"
-                    android:padding="4dp"
-                    android:scaleType="centerInside"
-                    android:src="@drawable/github" />
+                        android:id="@+id/btnGithub"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="GitHub"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/github" android:visibility="visible"/>
 
                 <ImageButton
-                    android:id="@+id/btnPlayStore"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="@android:color/transparent"
-                    android:contentDescription="Play Store"
-                    android:padding="4dp"
-                    android:scaleType="centerInside"
-                    android:src="@drawable/playstore" />
+                        android:id="@+id/btnPlayStore"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@android:color/transparent"
+                        android:contentDescription="Play Store"
+                        android:padding="4dp"
+                        android:scaleType="centerInside"
+                        android:src="@drawable/playstore" android:visibility="visible"/>
             </LinearLayout>
         </LinearLayout>
 
