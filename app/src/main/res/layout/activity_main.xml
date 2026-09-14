@@ -8,18 +8,62 @@
     android:visibility="visible"
     tools:context=".MainActivity">
 
-    <!-- Image preview: centered in screen -->
+    <!-- Image preview: kept for updatePreview() compatibility (share-intent path), hidden -->
     <ImageView
         android:id="@+id/imgPreview"
         android:layout_width="200dp"
         android:layout_height="200dp"
         android:scaleType="centerInside"
-        app:layout_constraintBottom_toTopOf="@id/appPanel"
+        android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         tools:ignore="ContentDescription"
         tools:srcCompat="@drawable/add_circle" />
+
+    <!-- History list: full-screen scroll; goes under status bar, nav bar and the appPanel -->
+    <ListView
+        android:id="@+id/listImages"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="@android:color/transparent"
+        android:cacheColorHint="@android:color/transparent"
+        android:clipToPadding="false"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:listSelector="@android:color/transparent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- Empty-state hint shown when no images are in the history yet -->
+    <TextView
+        android:id="@+id/txtEmptyHistory"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tap + to select images"
+        android:textColor="#55000000"
+        android:textSize="16sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.35" />
+
+    <!-- Pinned add button: below the status bar (offset applied in code), not part of the scroll -->
+    <ImageButton
+        android:id="@+id/btnAddImage"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Add image"
+        android:padding="10dp"
+        android:scaleType="centerInside"
+        android:src="@android:drawable/ic_menu_add"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <LinearLayout
         android:id="@+id/appPanel"
