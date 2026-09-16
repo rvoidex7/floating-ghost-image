@@ -3,7 +3,11 @@ package com.rvoidex7.floatingghostimage
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.DrawableWrapper
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.LruCache
 import android.view.LayoutInflater
 import android.view.View
@@ -12,6 +16,8 @@ import android.widget.BaseAdapter
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.TextView
+import java.io.BufferedInputStream
+import java.util.concurrent.Executors
 
 class ImageHistoryAdapter(
     context: Context,
@@ -27,9 +33,19 @@ class ImageHistoryAdapter(
     private val inflater = LayoutInflater.from(context)
     private val contentResolver = context.contentResolver
     private val reqSizePx = (160 * context.resources.displayMetrics.density).toInt().coerceAtLeast(320)
+    private val placeholderSizePx = (72 * context.resources.displayMetrics.density).toInt()
+    private val placeholder: Drawable = object : DrawableWrapper(context.getDrawable(android.R.drawable.ic_menu_gallery)!!) {
+        override fun getIntrinsicWidth(): Int = placeholderSizePx
+        override fun getIntrinsicHeight(): Int = placeholderSizePx
+    }.mutate().apply { setTint(0xFF9CA3AF.toInt()) }
     private val thumbCache = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
+    private val exifCache = object : LruCache<String, Int>(64) {
+        override fun sizeOf(key: String, value: Int): Int = 1
+    }
+    private val executor = Executors.newSingleThreadExecutor()
+    private val handler = Handler(Looper.getMainLooper())
 
     /** Device screen corner radius in px; row separators inset from each edge by this. */
     var cornerRadiusPx: Float = 60f
@@ -71,9 +87,14 @@ class ImageHistoryAdapter(
         fun bind(uriString: String, position: Int) {
             currentUri = uriString
             fgiCode.text = EXAMPLE_FGI_CODE
-            thumb.setImageBitmap(thumbCache.get(uriString) ?: decodeThumb(uriString)?.also {
-                thumbCache.put(uriString, it)
-            })
+
+            val cached = thumbCache.get(uriString)
+            if (cached != null) {
+                thumb.setImageBitmap(cached)
+            } else {
+                thumb.setImageDrawable(placeholder)
+                loadThumbAsync(uriString)
+            }
 
             // Separator only marks the gap between rows: hidden under the last item
             // (and when there is a single item), inset by the device corner radius.
@@ -87,10 +108,22 @@ class ImageHistoryAdapter(
             }
         }
 
+        private fun loadThumbAsync(uriString: String) {
+            executor.execute {
+                val bitmap = decodeThumb(uriString) ?: return@execute
+                thumbCache.put(uriString, bitmap)
+                handler.post {
+                    if (currentUri == uriString) thumb.setImageBitmap(bitmap)
+                }
+            }
+        }
+
         private fun decodeThumb(uriString: String): Bitmap? {
             return try {
                 val uri = Uri.parse(uriString)
-                val orientation = readExifOrientation(uri)
+                val orientation = exifCache.get(uriString) ?: run {
+                    readExifOrientation(uri).also { exifCache.put(uriString, it) }
+                }
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 contentResolver.openInputStream(uri)?.use {
                     BitmapFactory.decodeStream(it, null, bounds)
@@ -122,7 +155,9 @@ class ImageHistoryAdapter(
         private fun readExifOrientation(uri: Uri): Int {
             return try {
                 val stream = contentResolver.openInputStream(uri) ?: return 1
-                stream.use { readJpegOrientation(it) }
+                stream.use {
+                    readJpegOrientation(BufferedInputStream(it, 8192))
+                }
             } catch (_: Throwable) {
                 1
             }
