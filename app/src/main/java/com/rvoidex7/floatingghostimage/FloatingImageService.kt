@@ -124,7 +124,7 @@ class FloatingImageService : Service() {
         if (isControlsVisible) try { windowManager.removeView(controlsView) } catch (_: Throwable) {}
         if (::fabView.isInitialized && fabView.parent != null) try { windowManager.removeView(fabView) } catch (_: Throwable) {}
         if (imageAdded && imageRoot != null) try { windowManager.removeView(imageRoot) } catch (_: Throwable) {}
-        MainActivity.isFloatingServiceRunning = false
+        FloatingServiceState.setRunning(this, false)
         super.onDestroy()
     }
 
@@ -163,6 +163,17 @@ class FloatingImageService : Service() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
+
+    // Slider fires updateViewLayout on every tick (binder-heavy) -> coalesce into one per 80ms window
+    private val alphaSync = Runnable {
+        imageParams?.let { lp ->
+            try { windowManager.updateViewLayout(imageRoot, lp) } catch (_: Throwable) {}
+        }
+    }
+    private fun throttleAlphaSync() {
+        handler.removeCallbacks(alphaSync)
+        handler.postDelayed(alphaSync, 80)
+    }
 
     private fun setupImageWindow(layoutFlag: Int) {
         imageRoot = FrameLayout(this)
@@ -290,14 +301,17 @@ class FloatingImageService : Service() {
                 val a = (progress / 100f).coerceIn(0f, 1f)
                 lastImageAlpha = a
                 imageView?.alpha = a
-                // Update window alpha: apply threshold based on lock state
-                imageParams?.let { lp ->
-                    lp.alpha = if (isImageLocked) a.coerceAtMost(0.8f) else a
-                    try { windowManager.updateViewLayout(imageRoot, lp) } catch (_: Throwable) {}
-                }
+                // Defer the binder-heavy updateViewLayout to the end of the drag burst (throttle)
+                imageParams?.alpha = if (isImageLocked) a.coerceAtMost(0.8f) else a
+                throttleAlphaSync()
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                handler.removeCallbacks(alphaSync)
+            }
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                // Flush the final value once the drag ends
+                alphaSync.run()
+            }
         })
 
         btnBack?.setOnClickListener { closeControls() }

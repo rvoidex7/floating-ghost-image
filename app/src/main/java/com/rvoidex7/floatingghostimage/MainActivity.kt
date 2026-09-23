@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity() {
     private var shouldStartServiceAfterImagePick = false
 
     companion object {
-        var isFloatingServiceRunning = false
+        private var processInitialized = false
     }
 
     private val openDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { handlePickedImage(it) }
@@ -70,6 +70,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // A freshly spawned process cannot have the overlay running (service dies with it);
+        // clear any persisted running-state left behind by a killed process.
+        if (!processInitialized) {
+            processInitialized = true
+            FloatingServiceState.setRunning(this, false)
+        }
 
         // Enable edge-to-edge display
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -223,7 +230,7 @@ class MainActivity : AppCompatActivity() {
                     putExtra("opacity", 60)
                 }
                 startService(serviceIntent)
-                isFloatingServiceRunning = true
+                FloatingServiceState.setRunning(this, true)
                 updateButtonText()
                 Toast.makeText(this, "Overlay started with shared image.", Toast.LENGTH_SHORT).show()
                 // Close MainActivity and return to home screen
@@ -247,10 +254,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toggleFloatingService() {
-        if (isFloatingServiceRunning) {
+        if (FloatingServiceState.isRunning(this)) {
             // Stop FloatingImageService
             stopService(Intent(this, FloatingImageService::class.java))
-            isFloatingServiceRunning = false
+            FloatingServiceState.setRunning(this, false)
             Toast.makeText(this, "Overlay stopped.", Toast.LENGTH_SHORT).show()
         } else {
             // Check overlay permission
@@ -271,7 +278,7 @@ class MainActivity : AppCompatActivity() {
                 putExtra("opacity", 60)
             }
             startService(intent)
-            isFloatingServiceRunning = true
+            FloatingServiceState.setRunning(this, true)
             Toast.makeText(this, "Overlay started. Long press icon to edit.", Toast.LENGTH_SHORT).show()
             // Close MainActivity and return to home screen
             finish()
@@ -280,7 +287,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateButtonText() {
-        btnStartFloatingService.text = if (isFloatingServiceRunning) "STOP" else "START"
+        btnStartFloatingService.text = if (FloatingServiceState.isRunning(this)) "STOP" else "START"
     }
 
     private fun updatePreview() {
