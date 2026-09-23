@@ -52,15 +52,14 @@
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintVertical_bias="0.35" />
 
-    <!-- Pinned add button: below the status bar (offset applied in code), not part of the scroll -->
+    <!-- Add button: icon at max size the system drawable allows; positioned in code just above the logo -->
     <ImageButton
         android:id="@+id/btnAddImage"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
         android:background="?android:attr/selectableItemBackgroundBorderless"
         android:contentDescription="Add image"
-        android:padding="10dp"
-        android:scaleType="centerInside"
+        android:scaleType="fitXY"
         android:src="@android:drawable/ic_menu_add"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

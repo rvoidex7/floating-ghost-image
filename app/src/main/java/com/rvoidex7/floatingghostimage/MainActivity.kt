@@ -14,7 +14,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -62,6 +61,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var panelCornerRadiusPx = DEFAULT_CORNER_RADIUS_PX
+
+    private lateinit var root: android.view.View
 
     /**
      * Resolves the device's actual screen corner radius in pixels.
@@ -117,6 +118,21 @@ class MainActivity : AppCompatActivity() {
             val lineY = appPanel.top + radiusPx
             val centerY = imgAppIcon.top + imgAppIcon.height / 2f
             imgAppIcon.translationY = lineY - centerY
+
+            // "+" button sits just above the logo, so it frames the icon rather than
+            // floating at the top of the screen.
+            val logoTopY = lineY - imgAppIcon.height / 2f
+            val gapPx = 8 * resources.displayMetrics.density
+            val btnBottomY = logoTopY - gapPx
+            btnAddImage.translationY = btnBottomY - btnAddImage.height - btnAddImage.top
+
+            // Scroll stop: the last item can glide up over the "+" button (its lowest
+            // stop is the button's top edge, driven by the button's real position).
+            val stopLine = btnAddImage.top + btnAddImage.translationY
+            val bottom = ((root.height - stopLine).coerceAtLeast(0f)).toInt()
+            if (listImages.paddingBottom != bottom) {
+                listImages.updatePadding(bottom = bottom)
+            }
         }
     }
 
@@ -190,7 +206,7 @@ class MainActivity : AppCompatActivity() {
         listImages.emptyView = txtEmptyHistory
 
         // Apply window insets for edge-to-edge
-        val root = findViewById<android.view.View>(R.id.root)
+        root = findViewById<android.view.View>(R.id.root)
 
         // Dynamic corner-to-corner gradient based on screen ratio
         root.post {
@@ -226,29 +242,11 @@ class MainActivity : AppCompatActivity() {
             appPanel?.updatePadding(bottom = nb.bottom)
             applyPanelRoundedCorners(resolveCornerRadiusPx(insets))
 
-            // Pin the "+" add button just below the status bar
+            // Keep the first item clear of the status bar when at rest
             val sb = insets.getInsets(WindowInsetsCompat.Type.statusBars())
-            val lp = btnAddImage.layoutParams as ViewGroup.MarginLayoutParams
-            if (lp.topMargin != sb.top) {
-                lp.topMargin = sb.top
-                btnAddImage.layoutParams = lp
-            }
-
-            // Keep the first item clear of the status bar and "+" button when at rest
-            val addButtonHeight = (48 * resources.displayMetrics.density).toInt()
-            listImages.updatePadding(top = sb.top + addButtonHeight)
+            listImages.updatePadding(top = sb.top)
 
             insets
-        }
-
-        // Scroll stop: last item comes up until the panel's top edge (base panel has a
-        // fixed 60px radius and the logo sits inside the header, not straddling the edge).
-        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            val stopLine = appPanel.top
-            val bottom = (root.height - stopLine).coerceAtLeast(0)
-            if (listImages.paddingBottom != bottom) {
-                listImages.updatePadding(bottom = bottom)
-            }
         }
 
         txtVersion.text = getAppVersion()
