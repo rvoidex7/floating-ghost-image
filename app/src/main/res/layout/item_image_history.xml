@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- History list item: thumbnail only. Share/delete buttons and separator are
+     intentionally omitted; delete stays available through adapter infra. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingTop="12dp"
+    android:paddingBottom="12dp">
+
+    <ImageView
+        android:id="@+id/imgItemThumb"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:adjustViewBounds="false"
+        android:scaleType="centerInside"
+        android:src="@drawable/add_circle" />
+</LinearLayout>
