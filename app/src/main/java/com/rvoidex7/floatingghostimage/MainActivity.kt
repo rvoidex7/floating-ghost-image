@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.content.res.Resources
 import android.graphics.*
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -36,6 +37,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnOverlaySettings: ImageButton
     private lateinit var imgPreview: ImageView
     private lateinit var imgAppIcon: ImageView
+    private lateinit var appPanel: LinearLayout
     private lateinit var txtVersion: TextView
 
     private var selectedImageUri: Uri? = null
@@ -43,6 +45,69 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private var processInitialized = false
+        const val DEFAULT_CORNER_RADIUS_PX = 60f
+        // Constant distance (dp) between the panel's visible top edge and the icon row.
+        // Kept fixed so icon placement never depends on the device's corner radius.
+        const val ICONS_EDGE_GAP_DP = 8f
+    }
+
+    private var panelCornerRadiusPx = DEFAULT_CORNER_RADIUS_PX
+
+    /**
+     * Resolves the device's actual screen corner radius in pixels.
+     * 1. API 31+: real radius from WindowInsets.getRoundedCorner()
+     * 2. Otherwise/failure: hidden framework resource used by most OEMs
+     * 3. Otherwise: [DEFAULT_CORNER_RADIUS_PX] so the app never breaks.
+     */
+    private fun resolveCornerRadiusPx(insets: WindowInsetsCompat?): Float {
+        var radius = 0f
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val positions = intArrayOf(
+                android.view.RoundedCorner.POSITION_TOP_LEFT,
+                android.view.RoundedCorner.POSITION_TOP_RIGHT,
+                android.view.RoundedCorner.POSITION_BOTTOM_LEFT,
+                android.view.RoundedCorner.POSITION_BOTTOM_RIGHT
+            )
+            for (pos in positions) {
+                radius = maxOf(radius, insets?.getRoundedCorner(pos)?.radius?.toFloat() ?: 0f)
+            }
+        }
+
+        if (radius <= 0f) {
+            radius = try {
+                val dimen = Class.forName("com.android.internal.R\$dimen")
+                val resId = dimen.getField("rounded_corner_radius").getInt(null)
+                Resources.getSystem().getDimensionPixelSize(resId).toFloat()
+            } catch (_: Throwable) {
+                0f
+            }
+        }
+
+        return if (radius > 0f) radius else DEFAULT_CORNER_RADIUS_PX
+    }
+
+    /** Applies the given corner radius to the panel, keeps the logo centered & unclipped. */
+    private fun applyPanelRoundedCorners(radiusPx: Float) {
+        panelCornerRadiusPx = radiusPx
+
+        appPanel.background = InverseRoundedDrawable(
+            backgroundColor = Color.parseColor("#80000000"),
+            cornerRadius = radiusPx
+        )
+
+        // The visible panel edge is at `radiusPx` below the panel's top edge. Keep the icon
+        // row pinned to that edge with a constant gap, regardless of the device corner radius,
+        // so icon spacing never changes across devices.
+        val gapPx = ICONS_EDGE_GAP_DP * resources.displayMetrics.density
+        appPanel.updatePadding(top = (radiusPx + gapPx).toInt())
+
+        // Logo (root-level sibling) stays centered on the visible edge: half above, half below.
+        imgAppIcon.post {
+            val lineY = appPanel.top + radiusPx
+            val centerY = imgAppIcon.top + imgAppIcon.height / 2f
+            imgAppIcon.translationY = lineY - centerY
+        }
     }
 
     private val openDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { handlePickedImage(it) }
@@ -90,11 +155,11 @@ class MainActivity : AppCompatActivity() {
         btnOverlaySettings = findViewById(R.id.btnOverlaySettings)
         imgPreview = findViewById(R.id.imgPreview)
         imgAppIcon = findViewById(R.id.imgAppIcon)
+        appPanel = findViewById(R.id.appPanel)
         txtVersion = findViewById(R.id.txtVersion)
 
         // Apply window insets for edge-to-edge
         val root = findViewById<android.view.View>(R.id.root)
-        val appPanel = findViewById<LinearLayout>(R.id.appPanel)
 
         // Dynamic corner-to-corner gradient based on screen ratio
         root.post {
@@ -121,16 +186,14 @@ class MainActivity : AppCompatActivity() {
             root.background = gradientDrawable
         }
 
-        // Apply custom inverse rounded drawable for top corners
-        val inverseDrawable = InverseRoundedDrawable(
-            backgroundColor = Color.parseColor("#80000000"), // Semi-transparent black
-            cornerRadius = 60f // Corner radius in pixels
-        )
-        appPanel.background = inverseDrawable
+        // Apply the device's real screen corner radius to the panel; logo stays centered
+        // on the visible edge. Falls back to DEFAULT_CORNER_RADIUS_PX when unsupported.
+        applyPanelRoundedCorners(DEFAULT_CORNER_RADIUS_PX)
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val nb = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             appPanel?.updatePadding(bottom = nb.bottom)
+            applyPanelRoundedCorners(resolveCornerRadiusPx(insets))
             insets
         }
 
@@ -147,12 +210,12 @@ class MainActivity : AppCompatActivity() {
         // Apply Arcade Button retro style (3D effect)
         val buttonDrawable = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            // Round only bottom corners - matches panel radius (60f)
+            // Round only bottom corners - matches panel radius
             cornerRadii = floatArrayOf(
-                0f, 0f,   // Top-left - no rounding
-                0f, 0f,   // Top-right - no rounding
-                60f, 60f, // Bottom-right - matches panel
-                60f, 60f  // Bottom-left - matches panel
+                0f, 0f,             // Top-left - no rounding
+                0f, 0f,             // Top-right - no rounding
+                panelCornerRadiusPx, panelCornerRadiusPx, // Bottom-right - matches panel
+                panelCornerRadiusPx, panelCornerRadiusPx  // Bottom-left - matches panel
             )
             // 3D gradient effect: light on top, dark on bottom
             colors = intArrayOf(
