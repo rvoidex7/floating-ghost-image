@@ -1,5 +1,6 @@
 package com.rvoidex7.floatingghostimage
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
@@ -44,7 +45,10 @@ class MainActivity : AppCompatActivity() {
         var isFloatingServiceRunning = false
     }
 
-    private val openDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val openDocumentLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { handlePickedImage(it) }
+    private val getContentLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { handlePickedImage(it) }
+
+    private fun handlePickedImage(uri: Uri?) {
         if (uri != null) {
             // Persist permission for future access
             try {
@@ -229,7 +233,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun pickImage() {
-        openDocumentLauncher.launch(arrayOf("image/*"))
+        try {
+            openDocumentLauncher.launch(arrayOf("image/*"))
+        } catch (e: ActivityNotFoundException) {
+            // DocumentsUI missing/disabled on some ROMs (K6/K8) -> fall back to GET_CONTENT
+            try {
+                getContentLauncher.launch("image/*")
+            } catch (e2: ActivityNotFoundException) {
+                Toast.makeText(this, "No image picker available.", Toast.LENGTH_LONG).show()
+                shouldStartServiceAfterImagePick = false
+            }
+        }
     }
 
     private fun toggleFloatingService() {
@@ -277,11 +291,56 @@ class MainActivity : AppCompatActivity() {
             // 50% opacity (semi-transparent)
             imgPreview.alpha = 0.5f
         } else {
-            imgPreview.setImageURI(uri)
             imgPreview.imageTintList = null
             // Full opacity for actual image
             imgPreview.alpha = 1f
+            loadPreviewAsync(uri)
         }
+    }
+
+    /** Decodes the preview off the main thread: setImageURI did a full-size decode (too-large bitmap / ANR). */
+    private fun loadPreviewAsync(uri: Uri) {
+        val targetPx = (200 * resources.displayMetrics.density).toInt()
+        Thread {
+            val bitmap = try {
+                decodeSampledBitmap(uri, targetPx)
+            } catch (se: SecurityException) {
+                // URI permission was revoked (K11) -> reset to default state
+                runOnUiThread {
+                    if (selectedImageUri == uri) {
+                        Toast.makeText(this, "Lost access to this image.", Toast.LENGTH_LONG).show()
+                        selectedImageUri = null
+                        shouldStartServiceAfterImagePick = false
+                        updatePreview()
+                    }
+                }
+                null
+            } catch (t: Throwable) {
+                null
+            }
+            runOnUiThread {
+                if (selectedImageUri == uri && bitmap != null) {
+                    imgPreview.imageTintList = null
+                    imgPreview.setImageBitmap(bitmap)
+                } else {
+                    bitmap?.recycle()
+                }
+            }
+        }.start()
+    }
+
+    private fun decodeSampledBitmap(uri: Uri, reqPx: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sampleSize = 1
+        while (bounds.outWidth / (sampleSize * 2) >= reqPx && bounds.outHeight / (sampleSize * 2) >= reqPx) {
+            sampleSize *= 2
+        }
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        return contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
     }
 
     private fun updateOverlayIconColor() {

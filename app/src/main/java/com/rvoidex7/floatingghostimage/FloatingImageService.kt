@@ -4,10 +4,14 @@ import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import android.util.TypedValue
 import android.view.*
@@ -88,29 +92,25 @@ class FloatingImageService : Service() {
                     setupImageWindow(layoutFlag)
                 }
 
+                // Apply transforms synchronously (cheap); decode the bitmap off the main thread
+                imageView?.alpha = lastImageAlpha
+                imageView?.translationX = translationX
+                imageView?.translationY = translationY
+                imageView?.scaleX = scale
+                imageView?.scaleY = scale
+                imageView?.rotation = rotationDeg
+
                 try {
-                    imageView?.setImageURI(Uri.parse(uri))
-                    imageView?.alpha = lastImageAlpha
-
-                    // Center image on first launch
-                    if (translationX == 0f && translationY == 0f) {
-                        translationX = 0f
-                        translationY = 0f
-                    }
-                    imageView?.translationX = translationX
-                    imageView?.translationY = translationY
-                    imageView?.scaleX = scale
-                    imageView?.scaleY = scale
-                    imageView?.rotation = rotationDeg
-
                     if (!imageAdded) {
                         windowManager.addView(imageRoot, imageParams)
                         imageAdded = true
                         Log.d(TAG, "image window added")
                     }
                 } catch (t: Throwable) {
-                    Log.e(TAG, "setImageURI: ${t.message}")
+                    Log.e(TAG, "add image window failed: ${t.message}")
                 }
+
+                loadImageAsync(uri)
 
                 // Sync panel
                 controlsView.findViewById<SeekBar>(R.id.opacity_slider)?.progress = opacity
@@ -127,6 +127,42 @@ class FloatingImageService : Service() {
         MainActivity.isFloatingServiceRunning = false
         super.onDestroy()
     }
+
+    /** Full-size setImageURI was a too-large-bitmap / ANR source; decode sampled off-thread. */
+    private fun loadImageAsync(uriString: String) {
+        val target = max(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
+        Thread {
+            val bitmap = try {
+                decodeSampledBitmap(Uri.parse(uriString), target)
+            } catch (t: Throwable) {
+                null
+            }
+            handler.post {
+                if (lastImageUri == uriString && bitmap != null) {
+                    imageView?.setImageBitmap(bitmap)
+                    imageView?.alpha = lastImageAlpha
+                } else {
+                    bitmap?.recycle()
+                }
+            }
+        }.start()
+    }
+
+    private fun decodeSampledBitmap(uri: Uri, reqPx: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        var sampleSize = 1
+        while (bounds.outWidth / (sampleSize * 2) >= reqPx && bounds.outHeight / (sampleSize * 2) >= reqPx) {
+            sampleSize *= 2
+        }
+        val opts = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize
+            inPreferredConfig = Bitmap.Config.RGB_565
+        }
+        return contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+    }
+
+    private val handler = Handler(Looper.getMainLooper())
 
     private fun setupImageWindow(layoutFlag: Int) {
         imageRoot = FrameLayout(this)
