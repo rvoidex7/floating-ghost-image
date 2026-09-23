@@ -14,10 +14,12 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -27,6 +29,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import org.json.JSONArray
 
 class MainActivity : AppCompatActivity() {
 
@@ -39,6 +42,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var imgAppIcon: ImageView
     private lateinit var appPanel: LinearLayout
     private lateinit var txtVersion: TextView
+    private lateinit var listImages: ListView
+    private lateinit var btnAddImage: ImageButton
+    private lateinit var txtEmptyHistory: TextView
+
+    private val historyUris = ArrayList<String>()
+    private var historyAdapter: ImageHistoryAdapter? = null
+    private val historyPrefs by lazy { getSharedPreferences("fgi_history", MODE_PRIVATE) }
 
     private var selectedImageUri: Uri? = null
     private var shouldStartServiceAfterImagePick = false
@@ -121,6 +131,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Throwable) {}
             selectedImageUri = uri
             updatePreview()
+            addImageToHistory(uri)
             Toast.makeText(this, "Image selected.", Toast.LENGTH_SHORT).show()
 
             if (shouldStartServiceAfterImagePick) {
@@ -157,6 +168,26 @@ class MainActivity : AppCompatActivity() {
         imgAppIcon = findViewById(R.id.imgAppIcon)
         appPanel = findViewById(R.id.appPanel)
         txtVersion = findViewById(R.id.txtVersion)
+        listImages = findViewById(R.id.listImages)
+        btnAddImage = findViewById(R.id.btnAddImage)
+        txtEmptyHistory = findViewById(R.id.txtEmptyHistory)
+
+        // History list: load persisted images and wire the adapter.
+        // Tap on a row starts the overlay directly; delete infra stays in the
+        // adapter (onDelete) for a future trigger (e.g. long-press).
+        loadImageHistory()
+        historyAdapter = ImageHistoryAdapter(
+            context = this,
+            items = historyUris,
+            onItemClick = { uriString -> startOverlayForUri(uriString) },
+            onDelete = { uriString ->
+                historyUris.remove(uriString)
+                saveImageHistory()
+                historyAdapter?.notifyDataSetChanged()
+            }
+        )
+        listImages.adapter = historyAdapter
+        listImages.emptyView = txtEmptyHistory
 
         // Apply window insets for edge-to-edge
         val root = findViewById<android.view.View>(R.id.root)
@@ -194,7 +225,30 @@ class MainActivity : AppCompatActivity() {
             val nb = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
             appPanel?.updatePadding(bottom = nb.bottom)
             applyPanelRoundedCorners(resolveCornerRadiusPx(insets))
+
+            // Pin the "+" add button just below the status bar
+            val sb = insets.getInsets(WindowInsetsCompat.Type.statusBars())
+            val lp = btnAddImage.layoutParams as ViewGroup.MarginLayoutParams
+            if (lp.topMargin != sb.top) {
+                lp.topMargin = sb.top
+                btnAddImage.layoutParams = lp
+            }
+
+            // Keep the first item clear of the status bar and "+" button when at rest
+            val addButtonHeight = (48 * resources.displayMetrics.density).toInt()
+            listImages.updatePadding(top = sb.top + addButtonHeight)
+
             insets
+        }
+
+        // Scroll stop: last item comes up until the panel's top edge (base panel has a
+        // fixed 60px radius and the logo sits inside the header, not straddling the edge).
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            val stopLine = appPanel.top
+            val bottom = (root.height - stopLine).coerceAtLeast(0)
+            if (listImages.paddingBottom != bottom) {
+                listImages.updatePadding(bottom = bottom)
+            }
         }
 
         txtVersion.text = getAppVersion()
@@ -239,12 +293,9 @@ class MainActivity : AppCompatActivity() {
         // btnOverlaySettings color is set based on permission status
         updateOverlayIconColor()
 
-        // Image preview - click to select image
-        imgPreview.setOnClickListener { pickImage() }
+        // Image selection happens via the pinned "+" button (history list)
+        btnAddImage.setOnClickListener { pickImage() }
         updatePreview()
-
-        // Root area (outside appPanel) - click to select image
-        root.setOnClickListener { pickImage() }
 
         // Button click listeners
         btnStartFloatingService.setOnClickListener { toggleFloatingService() }
@@ -314,6 +365,55 @@ class MainActivity : AppCompatActivity() {
                 shouldStartServiceAfterImagePick = false
             }
         }
+    }
+
+    private fun loadImageHistory() {
+        historyUris.clear()
+        val raw = historyPrefs.getString("images", null) ?: return
+        try {
+            val arr = JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                historyUris.add(arr.getString(i))
+            }
+        } catch (_: Throwable) {
+            historyUris.clear()
+        }
+    }
+
+    private fun saveImageHistory() {
+        val arr = JSONArray()
+        for (uri in historyUris) {
+            arr.put(uri)
+        }
+        historyPrefs.edit().putString("images", arr.toString()).apply()
+    }
+
+    /** Newest first: removes any duplicate, then inserts at the top of the list. */
+    private fun addImageToHistory(uri: Uri) {
+        historyUris.remove(uri.toString())
+        historyUris.add(0, uri.toString())
+        saveImageHistory()
+        historyAdapter?.notifyDataSetChanged()
+    }
+
+    /** Starts the overlay directly with the given image URI (no "selected image" state). */
+    private fun startOverlayForUri(uriString: String) {
+        val uri = Uri.parse(uriString)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Please enable overlay permission.", Toast.LENGTH_LONG).show()
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+            startActivity(intent)
+            return
+        }
+        val serviceIntent = Intent(this, FloatingImageService::class.java).apply {
+            putExtra("imageUri", uri.toString())
+            putExtra("opacity", 60)
+        }
+        startService(serviceIntent)
+        FloatingServiceState.setRunning(this, true)
+        updateButtonText()
+        Toast.makeText(this, "Overlay started.", Toast.LENGTH_SHORT).show()
+        finish()
     }
 
     private fun toggleFloatingService() {
