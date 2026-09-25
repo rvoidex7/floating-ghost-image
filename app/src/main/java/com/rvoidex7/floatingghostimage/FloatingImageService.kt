@@ -42,11 +42,21 @@ class FloatingImageService : Service() {
     private lateinit var controlsParams: WindowManager.LayoutParams
     private var isControlsVisible = false
 
+    companion object {
+        const val MAX_OPACITY = 0.8f
+
+        fun sliderToAlpha(progress: Int): Float =
+            (progress / 100f).coerceIn(0f, 1f) * MAX_OPACITY
+
+        fun alphaToSlider(alpha: Float): Int =
+            ((alpha / MAX_OPACITY) * 100f).roundToInt().coerceIn(0, 100)
+    }
+
     // State
     // Lock ON: guide mode, semi-transparent with full passthrough
-    // Lock OFF: edit mode, opaque and touchable
+    // Lock OFF: edit mode, touchable
     private var isImageLocked = true
-    private var lastImageAlpha = 0.6f // default: 60% visibility, below click-through threshold
+    private var lastImageAlpha = sliderToAlpha(60)
     private var lastImageUri: String? = null
 
     // Transform state
@@ -78,8 +88,8 @@ class FloatingImageService : Service() {
             val uri = it.getStringExtra("imageUri")
             val opacity = it.getIntExtra("opacity", 60).coerceIn(0, 100)
             lastImageUri = uri
-            // Opacity value from user is 0..1 range
-            lastImageAlpha = opacity / 100f
+            // Opacity slider value 0..100 maps to window alpha 0.0..MAX_OPACITY (0.8f)
+            lastImageAlpha = sliderToAlpha(opacity)
 
             if (!uri.isNullOrEmpty()) {
                 if (imageRoot == null) {
@@ -89,8 +99,8 @@ class FloatingImageService : Service() {
                     setupImageWindow(layoutFlag)
                 }
 
-                // Apply transforms synchronously (cheap); decode the bitmap off the main thread
-                imageView?.alpha = lastImageAlpha
+                // Apply transforms synchronously (cheap); decode the bitmap off the main thread.
+                // imageView.alpha is fixed at 1.0f — opacity driven by LayoutParams.alpha only.
                 imageView?.translationX = translationX
                 imageView?.translationY = translationY
                 imageView?.scaleX = scale
@@ -118,6 +128,7 @@ class FloatingImageService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy")
+        handler.removeCallbacks(alphaSync)
         if (isControlsVisible) try { windowManager.removeView(controlsView) } catch (_: Throwable) {}
         if (::fabView.isInitialized && fabView.parent != null) try { windowManager.removeView(fabView) } catch (_: Throwable) {}
         if (imageAdded && imageRoot != null) try { windowManager.removeView(imageRoot) } catch (_: Throwable) {}
@@ -137,7 +148,7 @@ class FloatingImageService : Service() {
             handler.post {
                 if (lastImageUri == uriString && bitmap != null) {
                     imageView?.setImageBitmap(bitmap)
-                    imageView?.alpha = lastImageAlpha
+                    // imageView.alpha is always 1.0f — no reset needed.
                 } else {
                     bitmap?.recycle()
                 }
@@ -161,22 +172,28 @@ class FloatingImageService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
 
-    // Slider fires updateViewLayout on every tick (binder-heavy) -> coalesce into one per 80ms window
+    // Coalesce updates to once per frame (~60/120fps) without delaying user touch feedback
+    private var isAlphaSyncPending = false
     private val alphaSync = Runnable {
+        isAlphaSyncPending = false
         imageParams?.let { lp ->
             try { windowManager.updateViewLayout(imageRoot, lp) } catch (_: Throwable) {}
         }
     }
-    private fun throttleAlphaSync() {
-        handler.removeCallbacks(alphaSync)
-        handler.postDelayed(alphaSync, 80)
+    private fun requestAlphaSync() {
+        if (!isAlphaSyncPending) {
+            isAlphaSyncPending = true
+            handler.post(alphaSync)
+        }
     }
 
     private fun setupImageWindow(layoutFlag: Int) {
         imageRoot = FrameLayout(this)
         imageView = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            alpha = lastImageAlpha
+            // Always 1.0f: opacity is driven exclusively by the window's LayoutParams.alpha
+            // to prevent alpha² doubling (view-alpha × window-alpha = squared opacity).
+            alpha = 1.0f
         }
 
         imageRoot?.addView(imageView, FrameLayout.LayoutParams(
@@ -187,22 +204,12 @@ class FloatingImageService : Service() {
         // imageRoot should not consume touches - let them pass through
         imageRoot?.setOnTouchListener { _, _ -> false }
 
-        val initialFlags: Int
-        val initialAlpha: Float
-        if (isImageLocked) {
-            // Locked: reduce window alpha for full passthrough (Android 12+ exception)
-            initialFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            initialAlpha = lastImageAlpha.coerceAtMost(0.8f)
-        } else {
-            // Edit: overlay is touchable, works at full opacity
-            initialFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            initialAlpha = lastImageAlpha
-        }
+        // lastImageAlpha is always in 0..0.8f (slider maps 0–100 → 0.0–0.8f),
+        // so no coerceAtMost is needed — same flags/alpha regardless of lock state at init.
+        val initialFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
 
         imageParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -214,8 +221,8 @@ class FloatingImageService : Service() {
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 0
-            // Window-level alpha: important for Android 12+ click-through exception
-            alpha = initialAlpha
+            // Window-level alpha drives all opacity (0..0.8f); never exceeds 0.8f.
+            alpha = lastImageAlpha
         }
 
         // Touch listener in edit mode, no listener in passthrough mode
@@ -267,16 +274,16 @@ class FloatingImageService : Service() {
             val params = imageParams ?: return@setOnCheckedChangeListener
 
             if (checked) {
-                // Passthrough: NOT_TOUCHABLE + window alpha < 0.8
+                // Passthrough: NOT_TOUCHABLE. lastImageAlpha is already ≤ 0.8f (slider enforces it).
                 params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                params.alpha = lastImageAlpha.coerceAtMost(0.8f)
+                params.alpha = lastImageAlpha
                 imageView?.setOnTouchListener(null)
                 Log.d(TAG, "Lock ON -> PASSTHROUGH alpha=${params.alpha}")
             } else {
-                // Edit: touchable and works at full opacity
+                // Edit: touchable. Alpha stays the same — no visual jump on mode switch.
                 params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
@@ -295,18 +302,20 @@ class FloatingImageService : Service() {
 
         opacitySlider?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val a = (progress / 100f).coerceIn(0f, 1f)
+                // Map slider 0–100 → window alpha 0.0–MAX_OPACITY (0.8f).
+                // Capping at 0.8f means slider at full = actual visual max (passthrough legal limit).
+                // No coerceAtMost at lock/unlock time → zero visual jump on mode change.
+                // imageView.alpha stays 1.0f to avoid alpha² squaring.
+                val a = sliderToAlpha(progress)
                 lastImageAlpha = a
-                imageView?.alpha = a
-                // Defer the binder-heavy updateViewLayout to the end of the drag burst (throttle)
-                imageParams?.alpha = if (isImageLocked) a.coerceAtMost(0.8f) else a
-                throttleAlphaSync()
+                imageParams?.alpha = a
+                requestAlphaSync()
             }
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {
-                handler.removeCallbacks(alphaSync)
-            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                // Flush the final value once the drag ends
+                // Ensure the final resting value is applied immediately
+                handler.removeCallbacks(alphaSync)
+                isAlphaSyncPending = false
                 alphaSync.run()
             }
         })
@@ -322,7 +331,7 @@ class FloatingImageService : Service() {
                 // Toggle image visibility
                 imageView?.let {
                     it.visibility = if (it.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-                    if (it.visibility == View.VISIBLE) it.alpha = lastImageAlpha
+                    // imageView.alpha is always 1.0f — no restore needed.
                 }
                 return true
             }
@@ -361,14 +370,14 @@ class FloatingImageService : Service() {
         try { windowManager.addView(controlsView, controlsParams); isControlsVisible = true } catch (_: Throwable) {}
         // Sync lock switch and opacity with current state
         controlsView.findViewById<SwitchCompat>(R.id.lock_switch)?.isChecked = isImageLocked
-        val currentAlphaPercent = (lastImageAlpha * 100f).roundToInt()
-        controlsView.findViewById<SeekBar>(R.id.opacity_slider)?.progress = currentAlphaPercent
+        controlsView.findViewById<SeekBar>(R.id.opacity_slider)?.progress = alphaToSlider(lastImageAlpha)
     }
 
     private fun closeControls() {
         if (!isControlsVisible) return
 
-        // Always switch to lock mode when closing panel
+        // Always switch to lock mode when closing panel.
+        // No alpha coerce needed: lastImageAlpha is already ≤ 0.8f (slider enforces the range).
         if (!isImageLocked) {
             isImageLocked = true
             val params = imageParams
@@ -377,7 +386,7 @@ class FloatingImageService : Service() {
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                params.alpha = lastImageAlpha.coerceAtMost(0.8f)
+                params.alpha = lastImageAlpha
                 imageView?.setOnTouchListener(null)
                 try {
                     windowManager.updateViewLayout(imageRoot, params)
