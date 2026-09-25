@@ -76,11 +76,14 @@
         android:paddingHorizontal="16dp"
         android:paddingTop="0dp"
         android:paddingBottom="0dp"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="8dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent">
 
-        <!-- Icons row: height = icon size; logo bottom-aligned, top protrudes above -->
+        <!-- Icons row: left group + right group, logo lives outside as root sibling -->
         <LinearLayout
             android:id="@+id/iconRow"
             android:layout_width="match_parent"
@@ -89,7 +92,7 @@
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <!-- Left group: Documentation + Overlay permission settings -->
+            <!-- Left group: Overlay settings + Documentation -->
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -117,8 +120,6 @@
                         android:scaleType="centerInside"
                         android:src="@android:drawable/ic_dialog_info" android:visibility="visible"/>
             </LinearLayout>
-
-            <!-- App icon removed from the row; it now lives in root as a sibling of appPanel -->
 
             <!-- Right group: GitHub + Play Store -->
             <LinearLayout
@@ -193,8 +194,8 @@
                 android:visibility="gone"/>
     </LinearLayout>
 
-    <!-- App icon: straddles the panel's visible edge; sibling of the panel, drawn on top (no clipping).
-         Positioned in code relative to appPanel.top + the visible edge offset (cornerRadius). -->
+    <!-- App icon: straddles the panel's top edge; half above, half below.
+         Positioned in code relative to appPanel.top. -->
     <ImageView
         android:id="@+id/imgAppIcon"
         android:layout_width="76dp"

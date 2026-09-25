@@ -98,36 +98,34 @@ class MainActivity : AppCompatActivity() {
         return if (radius > 0f) radius else DEFAULT_CORNER_RADIUS_PX
     }
 
-    /** Applies the given corner radius to the panel, keeps the logo centered & unclipped. */
+    /** Applies the given corner radius to the panel. Logo straddles the panel's top edge. */
     private fun applyPanelRoundedCorners(radiusPx: Float) {
         panelCornerRadiusPx = radiusPx
 
-        appPanel.background = InverseRoundedDrawable(
-            backgroundColor = Color.parseColor("#80000000"),
+        // Normal rounded rect on all 4 corners — panel is a floating card.
+        appPanel.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
             cornerRadius = radiusPx
-        )
+            setColor(Color.parseColor("#80000000"))
+        }
 
-        // The visible panel edge is at `radiusPx` below the panel's top edge. Keep the icon
-        // row pinned to that edge with a constant gap, regardless of the device corner radius,
-        // so icon spacing never changes across devices.
-        val gapPx = ICONS_EDGE_GAP_DP * resources.displayMetrics.density
-        appPanel.updatePadding(top = (radiusPx + gapPx).toInt())
+        // Logo straddles the panel's top edge as a root-level view drawn on top —
+        // no top padding needed; the icon row starts right at the panel edge.
+        appPanel.updatePadding(top = 0)
 
-        // Logo (root-level sibling) stays centered on the visible edge: half above, half below.
+        // Center the logo on the panel's top edge.
         imgAppIcon.post {
-            val lineY = appPanel.top + radiusPx
+            val lineY = appPanel.top.toFloat()
             val centerY = imgAppIcon.top + imgAppIcon.height / 2f
             imgAppIcon.translationY = lineY - centerY
 
-            // "+" button sits just above the logo, so it frames the icon rather than
-            // floating at the top of the screen.
+            // "+" button sits just above the logo.
             val logoTopY = lineY - imgAppIcon.height / 2f
-            val gapPx = 8 * resources.displayMetrics.density
-            val btnBottomY = logoTopY - gapPx
+            val gap = 8 * resources.displayMetrics.density
+            val btnBottomY = logoTopY - gap
             btnAddImage.translationY = btnBottomY - btnAddImage.height - btnAddImage.top
 
-            // Scroll stop: the last item can glide up over the "+" button (its lowest
-            // stop is the button's top edge, driven by the button's real position).
+            // Scroll stop: last item can glide up to the "+" button's top edge.
             val stopLine = btnAddImage.top + btnAddImage.translationY
             val bottom = ((root.height - stopLine).coerceAtLeast(0f)).toInt()
             if (listImages.paddingBottom != bottom) {
@@ -239,7 +237,9 @@ class MainActivity : AppCompatActivity() {
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
             val nb = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
-            appPanel?.updatePadding(bottom = nb.bottom)
+            // Nav bar is included inside the panel as bottom padding —
+            // the title sits just above the nav bar.
+            appPanel.updatePadding(bottom = nb.bottom)
             applyPanelRoundedCorners(resolveCornerRadiusPx(insets))
 
             // Keep the first item clear of the status bar when at rest
