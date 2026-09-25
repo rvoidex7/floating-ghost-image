@@ -10,16 +10,17 @@ A lightweight Android overlay app that displays a semi-transparent reference ima
 ## Features
 
 - **Floating Overlay**: Display any image as a semi-transparent overlay on top of other apps
-- **Adjustable Opacity**: Control transparency from 0% to 100%
+- **Adjustable Opacity**: Control transparency from 0% to 100% (capped at the 80% system limit for touch passthrough)
 - **Lock Mode**: Enable passthrough to interact with apps below the overlay
 - **Edit Mode**: Drag, zoom, rotate, and position the image
+- **Image History**: Recently used images are listed for quick re-opening
 - **Share Integration**: Start overlay directly from any app's share menu
 - **Minimal Size**: Optimized APK under 2MB
 - **Clean UI**: Only used XML/Kotlin
 
 ## Requirements
 
-- Android 7.0 (API 24) or higher
+- Android 8.0 (API 26) or higher
 - Overlay permission (requested on first use)
 
 ## Installation
@@ -34,11 +35,10 @@ A lightweight Android overlay app that displays a semi-transparent reference ima
 ### Starting the Overlay
 
 1. Open **Floating Ghost Image**
-2. Tap the image preview area to select an image
-3. Tap the **START** button
-4. Grant overlay permission if prompted
-5. The app minimizes and shows a small floating icon
-6. Tap the icon to show/hide the image
+2. Tap the **+** button to select an image (or pick one from your recent history below)
+3. Grant overlay permission if prompted
+4. The overlay starts automatically, showing both a small floating icon and your image
+5. Tap the icon to show/hide the image
 
 ### Editing the Overlay
 
@@ -61,7 +61,9 @@ A lightweight Android overlay app that displays a semi-transparent reference ima
 ## Controls
 
 - **Floating Icon**: Tap to show/hide image, long press to edit, drag to move
-- **Opacity Slider**: Adjust image transparency (0-100%)
+- **+ Button**: Select an image from your device
+- **Image History**: Tap a recent image to start the overlay with it
+- **Opacity Slider**: Adjust image transparency (0-100%, capped at the 80% system passthrough limit)
 - **Lock Switch**: Enable/disable passthrough mode
 - **Back Button**: Return to icon-only mode
 - **Close Button**: Stop the overlay completely
@@ -81,10 +83,10 @@ This app has been heavily optimized for minimal APK size:
 
 ## Technical Details
 
-- **Minimum SDK**: 24 (Android 7.0)
-- **Target SDK**: 36 (Android 15)
+- **Minimum SDK**: 26 (Android 8.0)
+- **Target SDK**: 36 (Android 16)
 - **Language**: Kotlin
-- **Architecture**: Single activity + foreground service
+- **Architecture**: Single activity + overlay service
 - **Permissions**: `SYSTEM_ALERT_WINDOW` (overlay permission)
 
 ## Project Structure
@@ -94,12 +96,16 @@ app/
 ├── src/main/
 │   ├── java/com/rvoidex7/floatingghostimage/
 │   │   ├── MainActivity.kt          # Main UI screen
-│   │   └── FloatingImageService.kt  # Overlay service
+│   │   ├── FloatingImageService.kt  # Overlay service
+│   │   ├── ImageHistoryAdapter.kt   # History list adapter
+│   │   ├── FloatingServiceState.kt  # Overlay running-state persistence
+│   │   └── InverseRoundedDrawable.kt # Panel corner-radius drawable
 │   ├── res/
 │   │   ├── drawable/                # Vector drawables
-│   │   ├── layout/                  # XML layouts (2 files)
-│   │   ├── mipmap-*/                # App icons (mdpi to xhdpi)
-│   │   └── values/                  # Colors, strings, themes
+│   │   ├── layout/                  # XML layouts (3 files)
+│   │   ├── mipmap-*/                # App icons (adaptive: XML + webp fill)
+│   │   ├── values/                  # Colors, strings, themes
+│   │   └── xml/                     # Backup rules
 │   └── AndroidManifest.xml
 ├── build.gradle.kts                 # App-level build config
 └── proguard-rules.pro               # ProGuard optimization rules
@@ -163,7 +169,18 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## Changelog
 
-### Version 1.0 (Current)
+### Version 1.2 (Current)
+- Min SDK raised to 26 (Android 8.0); removed pre-26 compatibility code and legacy assets
+- Opacity fixed: single-source alpha via window, capped at the 80% system passthrough limit (no visual jump on lock/unlock)
+- Faster, lag-free opacity slider (per-frame coalesced updates)
+
+### Version 1.1
+- Home panel redesign with device corner radius
+- Image history list with persistence
+- Preview and overlay bitmaps decoded off the main thread (crash/ANR fixes)
+- Overlay running state persistence and opacity slider throttling
+
+### Version 1.0
 - Initial release
 - Basic overlay functionality
 - Lock/Edit mode toggle
