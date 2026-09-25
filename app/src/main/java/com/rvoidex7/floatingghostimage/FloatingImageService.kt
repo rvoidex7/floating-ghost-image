@@ -8,7 +8,6 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.PixelFormat
 import android.net.Uri
-import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -63,8 +62,7 @@ class FloatingImageService : Service() {
         Log.d(TAG, "onCreate")
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+        val layoutFlag = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
 
         setupFab(layoutFlag)
         setupControls(layoutFlag)
@@ -85,8 +83,7 @@ class FloatingImageService : Service() {
 
             if (!uri.isNullOrEmpty()) {
                 if (imageRoot == null) {
-                    val layoutFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
+                    val layoutFlag = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     // Start locked (passthrough) by default
                     isImageLocked = true
                     setupImageWindow(layoutFlag)

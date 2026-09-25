@@ -329,7 +329,7 @@ class MainActivity : AppCompatActivity() {
                 updatePreview()
 
                 // Check overlay permission
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                if (!Settings.canDrawOverlays(this)) {
                     Toast.makeText(this, "Please enable overlay permission.", Toast.LENGTH_LONG).show()
                     val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                     startActivity(intent)
@@ -397,7 +397,7 @@ class MainActivity : AppCompatActivity() {
     /** Starts the overlay directly with the given image URI (no "selected image" state). */
     private fun startOverlayForUri(uriString: String) {
         val uri = Uri.parse(uriString)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+        if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(this, "Please enable overlay permission.", Toast.LENGTH_LONG).show()
             val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             startActivity(intent)
@@ -422,7 +422,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Overlay stopped.", Toast.LENGTH_SHORT).show()
         } else {
             // Check overlay permission
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            if (!Settings.canDrawOverlays(this)) {
                 Toast.makeText(this, "Please enable overlay permission.", Toast.LENGTH_LONG).show()
                 val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                 startActivity(intent)
@@ -512,11 +512,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateOverlayIconColor() {
-        val hasOverlayPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            Settings.canDrawOverlays(this)
-        } else {
-            true
-        }
+        val hasOverlayPermission = Settings.canDrawOverlays(this)
 
         // If permission granted: default Android color, otherwise: orange-red warning color
         if (hasOverlayPermission) {
@@ -651,11 +647,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openOverlayPermissionSettings() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-            startActivity(intent)
-        } else {
-            Toast.makeText(this, "Overlay permission is only required for Android 6.0 and above.", Toast.LENGTH_SHORT).show()
-        }
+        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+        startActivity(intent)
     }
 }

@@ -1,4 +1,4 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
 
     <style name="Theme.FloatingGhostImage" parent="Theme.AppCompat.Light.NoActionBar">
         <!-- Instant launch: Show gradient background immediately -->
@@ -13,7 +13,7 @@
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
 
         <!-- Dark gradient background: Use light icons -->
-        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
-        <item name="android:windowLightNavigationBar" tools:targetApi="o">false</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

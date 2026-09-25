@@ -9,16 +9,13 @@ android {
 
     defaultConfig {
         applicationId = "com.rvoidex7.floatingghostimage"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Only include necessary densities to reduce APK size
-        // Remove xxxhdpi and xxhdpi to save ~200KB
-        vectorDrawables.useSupportLibrary = true
     }
 
     signingConfigs {
