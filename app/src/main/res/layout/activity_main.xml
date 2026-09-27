@@ -22,17 +22,18 @@
         tools:srcCompat="@drawable/add_circle" />
 
 <!-- History list: full-screen scroll; goes under status bar, nav bar and the appPanel -->
-    <ListView
+    <com.rvoidex7.floatingghostimage.HistoryListView
         android:id="@+id/listImages"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/transparent"
         android:cacheColorHint="@android:color/transparent"
+        android:clipChildren="false"
         android:clipToPadding="false"
         android:divider="@null"
         android:dividerHeight="0dp"
         android:listSelector="@android:color/transparent"
-        android:scrollbarStyle="outsideOverlay"
+        android:scrollbars="none"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
