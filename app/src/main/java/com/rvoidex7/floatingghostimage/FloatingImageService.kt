@@ -112,6 +112,8 @@ class FloatingImageService : Service() {
                         windowManager.addView(imageRoot, imageParams)
                         imageAdded = true
                         Log.d(TAG, "image window added")
+                        // Same-type overlays stack in add order; re-add the FAB so the image never covers it.
+                        if (fabView.parent != null) { windowManager.removeView(fabView); windowManager.addView(fabView, fabParams) }
                     }
                 } catch (t: Throwable) {
                     Log.e(TAG, "add image window failed: ${t.message}")
