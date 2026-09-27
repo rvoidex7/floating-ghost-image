@@ -3,7 +3,9 @@ package com.rvoidex7.floatingghostimage
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
@@ -219,7 +221,9 @@ class ImageHistoryAdapter(
             if (cached != null) {
                 thumb.setImageBitmap(cached)
             } else {
-                thumb.setImageDrawable(null)
+                // Loading placeholder: visible until the async decode lands and
+                // setImageBitmap replaces it.
+                thumb.setImageResource(android.R.drawable.ic_menu_gallery)
                 loadThumbAsync(uriString)
             }
         }
@@ -227,8 +231,13 @@ class ImageHistoryAdapter(
         /**
          * Spans the ImageView to the aspect-aware base rectangle (same area for
          * every image, clamped for extremes) and keeps a constant resting gap band
-         * (spacing/2 each side). The visual re-arrangement happens dynamically via
-         * transforms in applyPeakScale(), never here.
+         * (spacing/2 on each side). That padding is the lens's layout anchor: it
+         * makes the resting layout pitch equal the resting visual pitch
+         * (imageH + spacing), so the per-frame re-centring in applyPeakScale()
+         * stays offset-free and the safe-area extremes keep the grown first/last
+         * rows pinned to the status-bar and "+" button lines. Without it the rows
+         * pile a static spacing offset into the mean, and the extremes drift.
+         * The dynamic re-arrangement itself happens via transforms, never here.
          */
         private fun applyAspectSize() {
             val uriString = currentUri ?: return
@@ -266,7 +275,10 @@ class ImageHistoryAdapter(
                 handler.post {
                     if (currentUri != uriString) return@post
                     thumb.setImageBitmap(bitmap)
-                    // Aspect known only after decode: re-span the row to match.
+                    // Both decode paths return an EXIF-oriented bitmap, so its
+                    // dimensions give the true displayed aspect: cache it and
+                    // re-span the row to match.
+                    aspectCache.put(uriString, bitmap.width.toFloat() / bitmap.height)
                     applyAspectSize()
                 }
             }
@@ -275,35 +287,56 @@ class ImageHistoryAdapter(
         private fun decodeThumb(uriString: String): Bitmap? {
             return try {
                 val uri = Uri.parse(uriString)
-                val orientation = exifCache.get(uriString) ?: run {
-                    readExifOrientation(uri).also { exifCache.put(uriString, it) }
-                }
-                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                contentResolver.openInputStream(uri)?.use {
-                    BitmapFactory.decodeStream(it, null, bounds)
-                }
-                // Displayed aspect after EXIF rotation (5-8 swap width/height).
-                val rotated = orientation in 5..8
-                val w = if (rotated) bounds.outHeight else bounds.outWidth
-                val h = if (rotated) bounds.outWidth else bounds.outHeight
-                if (w > 0 && h > 0) aspectCache.put(uriString, w.toFloat() / h)
-                var sampleSize = 1
-                while (bounds.outWidth / (sampleSize * 2) >= reqSizePx
-                    && bounds.outHeight / (sampleSize * 2) >= reqSizePx
-                ) {
-                    sampleSize *= 2
-                }
-                val opts = BitmapFactory.Options().apply {
-                    inSampleSize = sampleSize
-                    inPreferredConfig = Bitmap.Config.RGB_565
-                }
-                val decoded = contentResolver.openInputStream(uri)?.use {
-                    BitmapFactory.decodeStream(it, null, opts)
-                } ?: return null
-                applyOrientation(decoded, orientation)
+                // API 28+ decodes, samples and applies EXIF orientation itself;
+                // older devices keep the hand-rolled BitmapFactory + EXIF path.
+                if (Build.VERSION.SDK_INT >= 28) decodeThumbModern(uri)
+                else decodeThumbLegacy(uri)
             } catch (_: Throwable) {
                 null
             }
+        }
+
+        /** API 28+: ImageDecoder handles sampling, colour and EXIF rotation. */
+        private fun decodeThumbModern(uri: Uri): Bitmap? {
+            val source = ImageDecoder.createSource(contentResolver, uri)
+            return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+                // Mirror the legacy sampling rule: halve until one edge would
+                // drop below the required grown display size.
+                var sample = 1
+                while (info.size.width / (sample * 2) >= reqSizePx
+                    && info.size.height / (sample * 2) >= reqSizePx
+                ) {
+                    sample *= 2
+                }
+                decoder.setTargetSampleSize(sample)
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+        }
+
+        /** API 26-27 fallback: manual EXIF rotation + BitmapFactory sampling. */
+        private fun decodeThumbLegacy(uri: Uri): Bitmap? {
+            val uriString = uri.toString()
+            val orientation = exifCache.get(uriString) ?: run {
+                readExifOrientation(uri).also { exifCache.put(uriString, it) }
+            }
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, bounds)
+            }
+            var sampleSize = 1
+            while (bounds.outWidth / (sampleSize * 2) >= reqSizePx
+                && bounds.outHeight / (sampleSize * 2) >= reqSizePx
+            ) {
+                sampleSize *= 2
+            }
+            val opts = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val decoded = contentResolver.openInputStream(uri)?.use {
+                BitmapFactory.decodeStream(it, null, opts)
+            } ?: return null
+            return applyOrientation(decoded, orientation)
         }
 
         /**

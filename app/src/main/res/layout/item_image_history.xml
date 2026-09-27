@@ -16,5 +16,5 @@
         android:layout_height="160dp"
         android:adjustViewBounds="false"
         android:scaleType="centerInside"
-        android:src="@drawable/add_circle" />
+        android:src="@android:drawable/ic_menu_gallery" />
 </LinearLayout>
