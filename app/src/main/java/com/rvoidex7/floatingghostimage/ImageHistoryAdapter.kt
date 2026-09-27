@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
+import androidx.annotation.RequiresApi
 import android.os.Handler
 import android.os.Looper
 import android.util.LruCache
@@ -46,7 +47,11 @@ class ImageHistoryAdapter(
     private val aspectCache = object : LruCache<String, Float>(128) {
         override fun sizeOf(key: String, value: Float): Int = 1
     }
-    private val executor = Executors.newSingleThreadExecutor()
+    // Three workers instead of one: the thumbnails visible together decode
+    // concurrently instead of waiting on a serial queue. Bounded pool — decode
+    // stays fast and background work stays predictable; the LRU thumb cache
+    // keeps repeat decodes of the same image at zero.
+    private val executor = Executors.newFixedThreadPool(3)
     private val handler = Handler(Looper.getMainLooper())
 
     companion object {
@@ -220,10 +225,14 @@ class ImageHistoryAdapter(
             val cached = thumbCache.get(uriString)
             if (cached != null) {
                 thumb.setImageBitmap(cached)
+                thumb.background = null
             } else {
-                // Loading placeholder: visible until the async decode lands and
-                // setImageBitmap replaces it.
+                // Loading placeholder: the gray frame outlines the exact box the
+                // thumbnail will fill (background always hugs the view bounds);
+                // the gallery icon sits centred inside. Both are replaced once
+                // the async decode lands.
                 thumb.setImageResource(android.R.drawable.ic_menu_gallery)
+                thumb.setBackgroundResource(R.drawable.thumb_frame)
                 loadThumbAsync(uriString)
             }
         }
@@ -270,14 +279,35 @@ class ImageHistoryAdapter(
 
         private fun loadThumbAsync(uriString: String) {
             executor.execute {
+                // Early aspect: a bounds-only read (just the file header) gives
+                // the true displayed aspect before the pixel decode even starts,
+                // so a cold-start row carries a correctly shaped frame from the
+                // first frame instead of a square that snaps into shape later.
+                // The decode below stays the only pixel pass for this image.
+                val uri = Uri.parse(uriString)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                contentResolver.openInputStream(uri)?.use {
+                    BitmapFactory.decodeStream(it, null, bounds)
+                }
+                val orientation = exifCache.get(uriString) ?: run {
+                    readExifOrientation(uri).also { exifCache.put(uriString, it) }
+                }
+                val rotated = orientation in 5..8
+                val bw = if (rotated) bounds.outHeight else bounds.outWidth
+                val bh = if (rotated) bounds.outWidth else bounds.outHeight
+                if (bw > 0 && bh > 0) aspectCache.put(uriString, bw.toFloat() / bh)
+                handler.post {
+                    if (currentUri != uriString) return@post
+                    applyAspectSize()
+                }
                 val bitmap = decodeThumb(uriString) ?: return@execute
                 thumbCache.put(uriString, bitmap)
                 handler.post {
                     if (currentUri != uriString) return@post
                     thumb.setImageBitmap(bitmap)
-                    // Both decode paths return an EXIF-oriented bitmap, so its
-                    // dimensions give the true displayed aspect: cache it and
-                    // re-span the row to match.
+                    // The frame is a loading cue only: drop it once the image lands.
+                    thumb.background = null
+                    // Authoritative aspect from the decoded pixels; re-span.
                     aspectCache.put(uriString, bitmap.width.toFloat() / bitmap.height)
                     applyAspectSize()
                 }
@@ -297,6 +327,7 @@ class ImageHistoryAdapter(
         }
 
         /** API 28+: ImageDecoder handles sampling, colour and EXIF rotation. */
+        @RequiresApi(Build.VERSION_CODES.P)
         private fun decodeThumbModern(uri: Uri): Bitmap? {
             val source = ImageDecoder.createSource(contentResolver, uri)
             return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
