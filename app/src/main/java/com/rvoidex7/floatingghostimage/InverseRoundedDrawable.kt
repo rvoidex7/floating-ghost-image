@@ -58,5 +58,6 @@ class InverseRoundedDrawable(
         paint.colorFilter = colorFilter
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 }

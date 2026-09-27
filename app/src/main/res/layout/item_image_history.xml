@@ -4,17 +4,19 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:gravity="center_horizontal"
     android:orientation="vertical"
-    android:paddingHorizontal="16dp"
-    android:paddingTop="12dp"
-    android:paddingBottom="12dp">
+    android:paddingHorizontal="16dp">
 
     <ImageView
         android:id="@+id/imgItemThumb"
         android:layout_width="160dp"
         android:layout_height="160dp"
         android:adjustViewBounds="false"
+        android:background="@drawable/thumb_frame"
+        android:importantForAccessibility="no"
         android:scaleType="centerInside"
-        android:src="@drawable/add_circle" />
+        android:src="@android:drawable/ic_menu_gallery" />
 </LinearLayout>

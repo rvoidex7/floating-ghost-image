@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Resources
 import android.graphics.*
-import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ShapeDrawable
 import android.graphics.drawable.shapes.RectShape
@@ -14,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.AbsListView
 import android.widget.Button
 import android.widget.ImageButton
 import android.widget.ImageView
@@ -63,6 +63,11 @@ class MainActivity : AppCompatActivity() {
     private var panelCornerRadiusPx = DEFAULT_CORNER_RADIUS_PX
 
     private lateinit var root: android.view.View
+
+    // Safe-area lines: the status-bar bottom edge (top) and the "+" button's top
+    // edge (bottom). Images may touch these lines when fully grown, never cross.
+    private var safeLineTopPx = 0
+    private var safeLineBottomY = 0
 
     /**
      * Resolves the device's actual screen corner radius in pixels.
@@ -128,11 +133,8 @@ class MainActivity : AppCompatActivity() {
 
             // Scroll stop: the last item can glide up over the "+" button (its lowest
             // stop is the button's top edge, driven by the button's real position).
-            val stopLine = btnAddImage.top + btnAddImage.translationY
-            val bottom = ((root.height - stopLine).coerceAtLeast(0f)).toInt()
-            if (listImages.paddingBottom != bottom) {
-                listImages.updatePadding(bottom = bottom)
-            }
+            safeLineBottomY = (btnAddImage.top + btnAddImage.translationY).toInt()
+            refreshSafeAreaPaddings()
         }
     }
 
@@ -193,17 +195,31 @@ class MainActivity : AppCompatActivity() {
         // adapter (onDelete) for a future trigger (e.g. long-press).
         loadImageHistory()
         historyAdapter = ImageHistoryAdapter(
+            listView = listImages,
             context = this,
             items = historyUris,
             onItemClick = { uriString -> startOverlayForUri(uriString) },
             onDelete = { uriString ->
                 historyUris.remove(uriString)
                 saveImageHistory()
-                historyAdapter?.notifyDataSetChanged()
+                notifyHistoryChanged()
             }
         )
         listImages.adapter = historyAdapter
         listImages.emptyView = txtEmptyHistory
+
+        // Fisheye peak: recomputed on every scroll frame from the scroll position only.
+        listImages.setOnScrollListener(object : AbsListView.OnScrollListener {
+            override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) = Unit
+            override fun onScroll(
+                view: AbsListView?,
+                firstVisibleItem: Int,
+                visibleItemCount: Int,
+                totalItemCount: Int
+            ) = updateHistoryPeakScale()
+        })
+        // First layout pass: rows are placed after this point, so scale them once.
+        listImages.post { updateHistoryPeakScale() }
 
         // Apply window insets for edge-to-edge
         root = findViewById<android.view.View>(R.id.root)
@@ -244,7 +260,11 @@ class MainActivity : AppCompatActivity() {
 
             // Keep the first item clear of the status bar when at rest
             val sb = insets.getInsets(WindowInsetsCompat.Type.statusBars())
-            listImages.updatePadding(top = sb.top)
+            safeLineTopPx = sb.top
+            refreshSafeAreaPaddings()
+
+            // The peak's safe area just moved (status bar / panel), rescale the rows.
+            listImages.post { updateHistoryPeakScale() }
 
             insets
         }
@@ -391,7 +411,84 @@ class MainActivity : AppCompatActivity() {
         historyUris.remove(uri.toString())
         historyUris.add(0, uri.toString())
         saveImageHistory()
+        notifyHistoryChanged()
+    }
+
+    /**
+     * Keeps the whole list content between the two safe lines — the status-bar
+     * bottom and the "+" button's top — plus a grow margin on each side.
+     *
+     * The fisheye peak line rides on row CENTRES, but a grown image's visual edge
+     * sits Max·h/2 outside its centre, so a fully grown first/last row would cross
+     * the safe lines by (Max−1)·avgH/2. That exact amount is added to both list
+     * paddings: at the scroll extremes the outermost VISUAL edge of the biggest
+     * image then touches the safe line instead of poking past it.
+     */
+    private fun refreshSafeAreaPaddings() {
+        if (!::root.isInitialized || root.height <= 0) return
+        if (!::listImages.isInitialized) return
+        val avgH = historyAdapter?.averageRowHeightPx ?: 0
+        val margin = ((ImageHistoryAdapter.MAX_SCALE - 1f) * avgH / 2f).toInt()
+        listImages.updatePadding(
+            top = safeLineTopPx + margin,
+            bottom = (root.height - safeLineBottomY).coerceAtLeast(0) + margin
+        )
+    }
+
+    /**
+     * notifyDataSetChanged() rebinds every row at the base scale; the rows are placed
+     * right after, so the peak scale is re-applied on the following layout pass.
+     */
+    private fun notifyHistoryChanged() {
         historyAdapter?.notifyDataSetChanged()
+        refreshSafeAreaPaddings()
+        listImages.post { updateHistoryPeakScale() }
+    }
+
+    /**
+     * Moves the fisheye peak inside the extremes the first and last rows can reach:
+     * at the top of the list the peak sits on the centre of the top-most row, at the
+     * end it sits on the centre of the bottom-most row — not a fixed safe area, but
+     * wherever the first/last image can actually be. Doubles as a scroll position
+     * cue for the hidden scrollbar. Everything is derived from the current scroll
+     * position; no measured row position is ever fed back into it.
+     */
+    private fun updateHistoryPeakScale() {
+        val adapter = historyAdapter ?: return
+        // Stable reference: the resting row height. Rows grow/shrink around it, but
+        // the extremes must not move with whatever size the first row has this frame.
+        val baseRowHeight = adapter.averageRowHeightPx
+        if (baseRowHeight <= 0) return
+        // Peak travels inside the visible area only. Its top extreme is the centre of
+        // the top-most row at rest (just below the status bar). Its bottom extreme is
+        // derived from the list's own scroll stop — the "+" button's top edge, which
+        // the list sets as its bottom padding — meaning the peak settles on the centre
+        // of the last row right where that last image can actually rest. Dynamic: if
+        // the button moves, the padding follows, and so does the peak.
+        val peakTop = listImages.paddingTop + baseRowHeight / 2f
+        val visibleBottom = listImages.height - listImages.paddingBottom - baseRowHeight / 2f
+        if (visibleBottom <= peakTop) return
+        val progress = historyScrollProgress()
+        val peakY = peakTop + (visibleBottom - peakTop) * progress
+        adapter.applyPeakScale(peakY, peakTop, visibleBottom)
+    }
+
+    /**
+     * 0f when the list rests at the top, 1f when the last row is fully visible,
+     * 0f when the content is too short to scroll (no division by zero).
+     *
+     * Uses the ListView's own vertical scroll metrics, which stay exact for rows of
+     * varying height (the fisheye makes rows differ) — unlike multiplying a fixed
+     * rowHeight by firstVisiblePosition, which drifts and made the peak jitter back.
+     */
+    private fun historyScrollProgress(): Float {
+        val metrics = listImages as HistoryListView
+        val range = metrics.verticalScrollRange()
+        val extent = metrics.verticalScrollExtent()
+        val maxScroll = range - extent
+        if (maxScroll <= 0) return 0f
+        val offset = metrics.verticalScrollOffset()
+        return (offset / maxScroll.toFloat()).coerceIn(0f, 1f)
     }
 
     /** Starts the overlay directly with the given image URI (no "selected image" state). */

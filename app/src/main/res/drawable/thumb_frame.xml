@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gray frame outlining the exact area the loaded thumbnail will fill.
+     Set as the ImageView's background while a thumbnail is loading; cleared
+     (background = null) when the decoded image replaces the placeholder. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <stroke
+        android:width="2dp"
+        android:color="#FFB3B3B3" />
+</shape>

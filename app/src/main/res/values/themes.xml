@@ -1,6 +1,8 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="Theme.FloatingGhostImage" parent="Theme.AppCompat.Light.NoActionBar">
+    <!-- Some system-bar attributes here need API 27/29; they no-op on the few
+         API 26 devices and are only meaningful on newer ones. -->
+    <style name="Theme.FloatingGhostImage" parent="Theme.AppCompat.Light.NoActionBar" tools:targetApi="29">
         <!-- Instant launch: Show gradient background immediately -->
         <item name="android:windowBackground">@drawable/background_gradient</item>
 
