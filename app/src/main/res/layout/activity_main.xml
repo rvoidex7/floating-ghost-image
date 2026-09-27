@@ -86,6 +86,7 @@
             android:id="@+id/iconRow"
             android:layout_width="match_parent"
             android:layout_height="48dp"
+            android:baselineAligned="false"
             android:clipChildren="false"
             android:gravity="center_vertical"
             android:orientation="horizontal">
