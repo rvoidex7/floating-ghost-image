@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Build
 import android.util.Log
 import android.util.TypedValue
 import android.view.*
@@ -24,6 +25,19 @@ import kotlin.math.*
 class FloatingImageService : Service() {
 
     private val TAG = "FGI-Floating"
+
+    /**
+     * Full-screen layout scope for the image window only: NOT_FOCUSABLE plus
+     * LAYOUT_IN_SCREEN/NO_LIMITS, so the image can be dragged under the status bar,
+     * navbar and notch areas (it is still drawn UNDER the system bars). The FAB and
+     * controls stay in the safe area on purpose — a small window below the navbar's
+     * gesture zone would be unreachable by touch and permanently stuck.
+     * Single source of truth so mode toggles can't accidentally drop the scope.
+     */
+    private val fullScreenFlags =
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
 
     private lateinit var windowManager: WindowManager
 
@@ -208,10 +222,9 @@ class FloatingImageService : Service() {
 
         // lastImageAlpha is always in 0..0.8f (slider maps 0–100 → 0.0–0.8f),
         // so no coerceAtMost is needed — same flags/alpha regardless of lock state at init.
-        val initialFlags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+        val initialFlags = fullScreenFlags or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
 
         imageParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -223,6 +236,13 @@ class FloatingImageService : Service() {
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 0
+            // Full-screen scope: let the image reach the status bar, navbar and
+            // notch areas instead of the overlay being inset/clipped there.
+            // (layoutInDisplayCutoutMode is API 28+; guarded for minSdk 26.)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
             // Window-level alpha drives all opacity (0..0.8f); never exceeds 0.8f.
             alpha = lastImageAlpha
         }
@@ -277,18 +297,16 @@ class FloatingImageService : Service() {
 
             if (checked) {
                 // Passthrough: NOT_TOUCHABLE. lastImageAlpha is already ≤ 0.8f (slider enforces it).
-                params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                params.flags = fullScreenFlags or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 params.alpha = lastImageAlpha
                 imageView?.setOnTouchListener(null)
                 Log.d(TAG, "Lock ON -> PASSTHROUGH alpha=${params.alpha}")
             } else {
                 // Edit: touchable. Alpha stays the same — no visual jump on mode switch.
-                params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                params.flags = fullScreenFlags or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 params.alpha = lastImageAlpha
                 imageView?.setOnTouchListener(ImageTouchListener())
                 Log.d(TAG, "Lock OFF -> EDIT alpha=${params.alpha}")
@@ -384,10 +402,9 @@ class FloatingImageService : Service() {
             isImageLocked = true
             val params = imageParams
             if (params != null) {
-                params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                params.flags = fullScreenFlags or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 params.alpha = lastImageAlpha
                 imageView?.setOnTouchListener(null)
                 try {
