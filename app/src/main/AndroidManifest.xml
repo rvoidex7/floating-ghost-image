@@ -23,7 +23,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Image sharing support -->
+        </activity>
+
+        <!-- Share gate: transparent window showing only the native confirm
+             dialog when the app is picked from another app's share sheet.
+             The main app UI never opens in this flow. -->
+        <activity
+            android:name=".ShareGateActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.FloatingGhostImage.Transparent">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

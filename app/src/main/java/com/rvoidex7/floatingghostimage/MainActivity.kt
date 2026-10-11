@@ -24,6 +24,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -191,19 +192,14 @@ class MainActivity : AppCompatActivity() {
         txtEmptyHistory = findViewById(R.id.txtEmptyHistory)
 
         // History list: load persisted images and wire the adapter.
-        // Tap on a row starts the overlay directly; delete infra stays in the
-        // adapter (onDelete) for a future trigger (e.g. long-press).
         loadImageHistory()
         historyAdapter = ImageHistoryAdapter(
             listView = listImages,
             context = this,
             items = historyUris,
             onItemClick = { uriString -> startOverlayForUri(uriString) },
-            onDelete = { uriString ->
-                historyUris.remove(uriString)
-                saveImageHistory()
-                notifyHistoryChanged()
-            }
+            // Long-press on a row: native centered action card (image + Remove).
+            onItemLongClick = { uriString -> showActionCardForHistoryItem(uriString) }
         )
         listImages.adapter = historyAdapter
         listImages.emptyView = txtEmptyHistory
@@ -322,9 +318,6 @@ class MainActivity : AppCompatActivity() {
         btnPlayStore.setOnClickListener { openPlayStore() }
         btnOverlaySettings.setOnClickListener { openOverlayPermissionSettings() }
         imgAppIcon.setOnClickListener { openAppSettings() }
-
-        // Handle image sharing intent
-        handleShareIntentIfAny(intent)
     }
 
     override fun onResume() {
@@ -333,42 +326,22 @@ class MainActivity : AppCompatActivity() {
         updateOverlayIconColor()
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        handleShareIntentIfAny(intent)
-    }
-
-    private fun handleShareIntentIfAny(incoming: Intent?) {
-        val action = incoming?.action
-        val type = incoming?.type
-        if (Intent.ACTION_SEND == action && type?.startsWith("image/") == true) {
-            @Suppress("DEPRECATION")
-            val uri = incoming.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
-            if (uri != null) {
-                selectedImageUri = uri
-                updatePreview()
-
-                // Check overlay permission
-                if (!Settings.canDrawOverlays(this)) {
-                    Toast.makeText(this, "Please enable overlay permission.", Toast.LENGTH_LONG).show()
-                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                    startActivity(intent)
-                    return
-                }
-
-                // Start overlay directly with shared image
-                val serviceIntent = Intent(this, FloatingImageService::class.java).apply {
-                    putExtra("imageUri", uri.toString())
-                    putExtra("opacity", 60)
-                }
-                startService(serviceIntent)
-                FloatingServiceState.setRunning(this, true)
-                updateButtonText()
-                Toast.makeText(this, "Overlay started with shared image.", Toast.LENGTH_SHORT).show()
-                // Close MainActivity and return to home screen
-                finish()
+    /**
+     * Long-press on a history row: opens the native action card with the image
+     * preview and a Remove action. The card is centred by the system dialog.
+     */
+    private fun showActionCardForHistoryItem(uriString: String) {
+        ImageCardDialog.show(
+            context = this,
+            uri = uriString.toUri(),
+            showBrand = false,
+            negativeLabel = "Remove",
+            onNegative = {
+                historyUris.remove(uriString)
+                saveImageHistory()
+                notifyHistoryChanged()
             }
-        }
+        )
     }
 
     private fun pickImage() {

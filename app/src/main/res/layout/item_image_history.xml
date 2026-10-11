@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- History list item: thumbnail only. Share/delete buttons and separator are
-     intentionally omitted; delete stays available through adapter infra. -->
+     intentionally omitted; delete lives in the long-press action card. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"

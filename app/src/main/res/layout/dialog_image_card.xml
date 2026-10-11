@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Content view inflated into a NATIVE framework AlertDialog. The dialog
+     chrome (rounded corners, margins, scrim, text buttons) is the system's
+     (device's) default — nothing here restyles it.
+
+     Content, in order:
+       - aspect-sized flat preview (no crop/round)
+       - brand row (logo + app name) -> share-intent variant only
+     No title/name, no custom buttons (the dialog provides them).
+
+     Inner spacing: 24dp on all four sides, copied from the Material 3 dialog
+     content spec. The framework dialog does not pad the custom view area, so
+     the content itself owns the breathing room. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <!-- Brand row: small logo + "Floating Ghost Image", nothing else.
+         Anchored on top (fixed while the preview height varies); GONE unless
+         the caller asks for it (share intent). -->
+    <LinearLayout
+        android:id="@+id/brandRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        tools:visibility="visible">
+
+        <ImageView
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:contentDescription="@string/app_logo_desc"
+            android:scaleType="fitCenter"
+            android:src="@mipmap/ic_launcher" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:text="@string/app_name"
+            android:textColor="#B3B1B9"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Preview: sized by code to the image's real aspect ratio, capped at
+         240x280dp (centerInside, NO crop/round). thumb_frame is the loading
+         skeleton only — cleared once decoded. -->
+    <ImageView
+        android:id="@+id/imgCardPreview"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/thumb_frame"
+        android:contentDescription="@string/image_preview_desc"
+        android:scaleType="centerInside"
+        android:src="@android:drawable/ic_menu_gallery" />
+
+    <!-- FGI Code field: the feature does not exist yet, so it stays OUT of the
+         UI until built. Re-enable by deleting this comment block; the proper
+         textbox frame will be picked from the UI when the feature lands. -->
+    <!--
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FGI Code ="
+            android:textColor="#A9A7B2"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/edtFgiCode"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:inputType="text"
+            android:maxLines="1"
+            android:padding="8dp"
+            android:text="X31.6;Y27.2;W26.4;R90;A60;S1080x2400"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:typeface="monospace" />
+    </LinearLayout>
+    -->
+</LinearLayout>

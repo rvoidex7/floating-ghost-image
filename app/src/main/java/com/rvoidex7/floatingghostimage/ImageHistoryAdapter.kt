@@ -26,7 +26,7 @@ class ImageHistoryAdapter(
     context: Context,
     private val items: List<String>,
     private val onItemClick: (String) -> Unit,
-    private val onDelete: (String) -> Unit
+    private val onItemLongClick: ((String) -> Unit)? = null
 ) : BaseAdapter() {
 
     private val inflater = LayoutInflater.from(context)
@@ -211,6 +211,13 @@ class ImageHistoryAdapter(
 
         init {
             row.setOnClickListener { currentUri?.let(onItemClick) }
+            // Row-level long-press: reliable regardless of ListView internals;
+            // haptic feedback comes from the ListView itself via longClickable.
+            row.isLongClickable = true
+            row.setOnLongClickListener {
+                currentUri?.let { uri -> onItemLongClick?.invoke(uri) }
+                true
+            }
         }
 
         fun bind(uriString: String) {
@@ -286,9 +293,16 @@ class ImageHistoryAdapter(
                 // The decode below stays the only pixel pass for this image.
                 val uri = Uri.parse(uriString)
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                contentResolver.openInputStream(uri)?.use {
-                    BitmapFactory.decodeStream(it, null, bounds)
+                try {
+                    contentResolver.openInputStream(uri)?.use {
+                        BitmapFactory.decodeStream(it, null, bounds)
+                    }
+                } catch (_: Throwable) {
+                    // Lost access to this URI (e.g. uri permission revoked on a
+                    // reinstall). Leave bounds empty; the row keeps its frame and
+                    // decodeThumb below also bails out — never crash on a thumbnail.
                 }
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@execute
                 val orientation = exifCache.get(uriString) ?: run {
                     readExifOrientation(uri).also { exifCache.put(uriString, it) }
                 }

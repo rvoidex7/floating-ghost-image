@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Floating Ghost Image</string>
+    <string name="app_logo_desc">App logo</string>
+    <string name="image_preview_desc">Image preview</string>
     <string name="back_button_desc">Back</string>
     <string name="crop_icon_desc">Crop</string>
     <string name="lock_icon_desc">Lock</string>
