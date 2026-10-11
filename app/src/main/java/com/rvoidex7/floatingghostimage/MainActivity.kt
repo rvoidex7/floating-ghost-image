@@ -104,7 +104,7 @@ class MainActivity : AppCompatActivity() {
         return if (radius > 0f) radius else DEFAULT_CORNER_RADIUS_PX
     }
 
-    /** Applies the given corner radius to the panel, keeps the logo centered & unclipped. */
+    /** Applies the given corner radius to the panel and pins the "+" button to its top edge. */
     private fun applyPanelRoundedCorners(radiusPx: Float) {
         panelCornerRadiusPx = radiusPx
 
@@ -113,23 +113,18 @@ class MainActivity : AppCompatActivity() {
             cornerRadius = radiusPx
         )
 
-        // The visible panel edge is at `radiusPx` below the panel's top edge. Keep the icon
-        // row pinned to that edge with a constant gap, regardless of the device corner radius,
-        // so icon spacing never changes across devices.
+        // The visible panel edge is at `radiusPx` below the panel's top edge. Keep the panel
+        // content pinned to that edge with a constant gap, regardless of the device corner
+        // radius, so spacing never changes across devices.
         val gapPx = ICONS_EDGE_GAP_DP * resources.displayMetrics.density
         appPanel.updatePadding(top = (radiusPx + gapPx).toInt())
 
-        // Logo (root-level sibling) stays centered on the visible edge: half above, half below.
-        imgAppIcon.post {
-            val lineY = appPanel.top + radiusPx
-            val centerY = imgAppIcon.top + imgAppIcon.height / 2f
-            imgAppIcon.translationY = lineY - centerY
-
-            // "+" button sits just above the logo, so it frames the icon rather than
-            // floating at the top of the screen.
-            val logoTopY = lineY - imgAppIcon.height / 2f
+        // "+" button rests on the panel's visible top edge (just above it). Everything below
+        // is derived from the button's real position, so the history scroll stop follows it.
+        btnAddImage.post {
+            val edgeY = appPanel.top + radiusPx
             val gapPx = 8 * resources.displayMetrics.density
-            val btnBottomY = logoTopY - gapPx
+            val btnBottomY = edgeY - gapPx
             btnAddImage.translationY = btnBottomY - btnAddImage.height - btnAddImage.top
 
             // Scroll stop: the last item can glide up over the "+" button (its lowest
@@ -245,8 +240,8 @@ class MainActivity : AppCompatActivity() {
             root.background = gradientDrawable
         }
 
-        // Apply the device's real screen corner radius to the panel; logo stays centered
-        // on the visible edge. Falls back to DEFAULT_CORNER_RADIUS_PX when unsupported.
+        // Apply the device's real screen corner radius to the panel and pin the "+" button
+        // to the panel's top edge. Falls back to DEFAULT_CORNER_RADIUS_PX when unsupported.
         applyPanelRoundedCorners(DEFAULT_CORNER_RADIUS_PX)
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
