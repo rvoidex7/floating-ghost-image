@@ -2,7 +2,6 @@ package com.rvoidex7.floatingghostimage
 
 import android.annotation.SuppressLint
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -15,16 +14,20 @@ import android.os.Build
 import android.util.Log
 import android.util.TypedValue
 import android.view.*
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.SeekBar
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.net.toUri
+import androidx.core.view.isVisible
 import kotlin.math.*
 
 class FloatingImageService : Service() {
 
-    private val TAG = "FGI-Floating"
+    private val tag = "FGI-Floating"
+
+    /** Window type shared by every overlay this service adds. */
+    private val overlayType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
 
     /**
      * Full-screen layout scope for the image window only: NOT_FOCUSABLE plus
@@ -83,34 +86,31 @@ class FloatingImageService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        Log.d(TAG, "onCreate")
+        Log.d(tag, "onCreate")
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
 
-        val layoutFlag = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        setupFab()
+        setupControls()
 
-        setupFab(layoutFlag)
-        setupControls(layoutFlag)
-
-        try { windowManager.addView(fabView, fabParams); Log.d(TAG, "fab added") } catch (t: Throwable) { Log.e(TAG, "add fab failed: ${t.message}") }
+        try { windowManager.addView(fabView, fabParams); Log.d(tag, "fab added") } catch (t: Throwable) { Log.e(tag, "add fab failed: ${t.message}") }
 
         setupFabTouch()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand")
+        Log.d(tag, "onStartCommand")
         intent?.let {
             val uri = it.getStringExtra("imageUri")
             val opacity = it.getIntExtra("opacity", 60).coerceIn(0, 100)
             lastImageUri = uri
-            // Opacity slider value 0..100 maps to window alpha 0.0..MAX_OPACITY (0.8f)
+            // Slider 0–100 maps to window alpha 0.0–0.8 (MAX_OPACITY).
             lastImageAlpha = sliderToAlpha(opacity)
 
             if (!uri.isNullOrEmpty()) {
                 if (imageRoot == null) {
-                    val layoutFlag = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     // Start locked (passthrough) by default
                     isImageLocked = true
-                    setupImageWindow(layoutFlag)
+                    setupImageWindow()
                 }
 
                 // Apply transforms synchronously (cheap); decode the bitmap off the main thread.
@@ -125,12 +125,12 @@ class FloatingImageService : Service() {
                     if (!imageAdded) {
                         windowManager.addView(imageRoot, imageParams)
                         imageAdded = true
-                        Log.d(TAG, "image window added")
-                        // Same-type overlays stack in add order; re-add the FAB so the image never covers it.
+                        Log.d(tag, "image window added")
+                        // Same-type overlays stack in the order they are added; re-add the FAB so the image never covers it.
                         if (fabView.parent != null) { windowManager.removeView(fabView); windowManager.addView(fabView, fabParams) }
                     }
                 } catch (t: Throwable) {
-                    Log.e(TAG, "add image window failed: ${t.message}")
+                    Log.e(tag, "add image window failed: ${t.message}")
                 }
 
                 loadImageAsync(uri)
@@ -143,7 +143,7 @@ class FloatingImageService : Service() {
     }
 
     override fun onDestroy() {
-        Log.d(TAG, "onDestroy")
+        Log.d(tag, "onDestroy")
         handler.removeCallbacks(alphaSync)
         if (isControlsVisible) try { windowManager.removeView(controlsView) } catch (_: Throwable) {}
         if (::fabView.isInitialized && fabView.parent != null) try { windowManager.removeView(fabView) } catch (_: Throwable) {}
@@ -157,8 +157,9 @@ class FloatingImageService : Service() {
         val target = max(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
         Thread {
             val bitmap = try {
-                decodeSampledBitmap(Uri.parse(uriString), target)
+                decodeSampledBitmap(uriString.toUri(), target)
             } catch (t: Throwable) {
+                Log.w(tag, "Failed to decode bitmap: $uriString", t)
                 null
             }
             handler.post {
@@ -203,7 +204,8 @@ class FloatingImageService : Service() {
         }
     }
 
-    private fun setupImageWindow(layoutFlag: Int) {
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupImageWindow() {
         imageRoot = FrameLayout(this)
         imageView = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
@@ -214,13 +216,10 @@ class FloatingImageService : Service() {
 
         imageRoot?.addView(imageView, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
+            FrameLayout.LayoutParams.MATCH_PARENT,
         ))
 
-        // imageRoot should not consume touches - let them pass through
-        imageRoot?.setOnTouchListener { _, _ -> false }
-
-        // lastImageAlpha is always in 0..0.8f (slider maps 0–100 → 0.0–0.8f),
+        // lastImageAlpha is always within 0.0–0.8f (slider 0–100 → 0.0–0.8f),
         // so no coerceAtMost is needed — same flags/alpha regardless of lock state at init.
         val initialFlags = fullScreenFlags or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
@@ -229,21 +228,21 @@ class FloatingImageService : Service() {
         imageParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
-            layoutFlag,
+            overlayType,
             initialFlags,
-            PixelFormat.TRANSLUCENT
+            PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 0
             // Full-screen scope: let the image reach the status bar, navbar and
             // notch areas instead of the overlay being inset/clipped there.
-            // (layoutInDisplayCutoutMode is API 28+; guarded for minSdk 26.)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // (The field is API 28+; the ALWAYS constant is API 30+, hence the R guard.)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             }
-            // Window-level alpha drives all opacity (0..0.8f); never exceeds 0.8f.
+            // Window-level alpha drives all opacity (0.0–0.8f); never exceeds 0.8f.
             alpha = lastImageAlpha
         }
 
@@ -254,16 +253,16 @@ class FloatingImageService : Service() {
             imageView?.setOnTouchListener(null)
         }
 
-        Log.d(TAG, "setupImageWindow: locked=$isImageLocked flags=${imageParams?.flags} alpha=${imageParams?.alpha}")
+        Log.d(tag, "setupImageWindow: locked=$isImageLocked flags=${imageParams?.flags} alpha=${imageParams?.alpha}")
     }
 
-    private fun setupFab(layoutFlag: Int) {
+    private fun setupFab() {
         fabView = ImageView(this).apply { setImageResource(R.mipmap.ic_launcher) }
         fabParams = WindowManager.LayoutParams(
             dp(48), dp(48),
-            layoutFlag,
+            overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
+            PixelFormat.TRANSLUCENT,
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = dp(16)
@@ -271,17 +270,18 @@ class FloatingImageService : Service() {
         }
     }
 
-    private fun setupControls(layoutFlag: Int) {
+    @SuppressLint("InflateParams")
+    private fun setupControls() {
         // Use themed context for AppCompat components
         val ctx = androidx.appcompat.view.ContextThemeWrapper(this, R.style.Theme_FloatingGhostImage)
-        val inflater = ctx.getSystemService(Context.LAYOUT_INFLATER_SERVICE) as LayoutInflater
+        val inflater = ctx.getSystemService(LAYOUT_INFLATER_SERVICE) as LayoutInflater
         controlsView = inflater.inflate(R.layout.floating_controls, null)
         controlsParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            layoutFlag,
+            overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
+            PixelFormat.TRANSLUCENT,
         ).apply { gravity = Gravity.TOP or Gravity.START }
 
         val opacitySlider: SeekBar? = controlsView.findViewById(R.id.opacity_slider)
@@ -302,21 +302,21 @@ class FloatingImageService : Service() {
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 params.alpha = lastImageAlpha
                 imageView?.setOnTouchListener(null)
-                Log.d(TAG, "Lock ON -> PASSTHROUGH alpha=${params.alpha}")
+                Log.d(tag, "Lock ON -> PASSTHROUGH alpha=${params.alpha}")
             } else {
                 // Edit: touchable. Alpha stays the same — no visual jump on mode switch.
                 params.flags = fullScreenFlags or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                 params.alpha = lastImageAlpha
                 imageView?.setOnTouchListener(ImageTouchListener())
-                Log.d(TAG, "Lock OFF -> EDIT alpha=${params.alpha}")
+                Log.d(tag, "Lock OFF -> EDIT alpha=${params.alpha}")
             }
 
             try {
                 windowManager.updateViewLayout(imageRoot, params)
-                Log.d(TAG, "flags updated=${params.flags} alpha=${params.alpha}")
+                Log.d(tag, "flags updated=${params.flags} alpha=${params.alpha}")
             } catch (t: Throwable) {
-                Log.e(TAG, "Failed to update flags: ${t.message}")
+                Log.e(tag, "Failed to update flags: ${t.message}")
             }
         }
 
@@ -350,7 +350,7 @@ class FloatingImageService : Service() {
             override fun onSingleTapUp(e: MotionEvent): Boolean {
                 // Toggle image visibility
                 imageView?.let {
-                    it.visibility = if (it.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                    it.visibility = if (it.isVisible) View.GONE else View.VISIBLE
                     // imageView.alpha is always 1.0f — no restore needed.
                 }
                 return true
@@ -396,7 +396,7 @@ class FloatingImageService : Service() {
     private fun closeControls() {
         if (!isControlsVisible) return
 
-        // Always switch to lock mode when closing panel.
+        // Always switch to lock mode when closing the panel.
         // No alpha coerce needed: lastImageAlpha is already ≤ 0.8f (slider enforces the range).
         if (!isImageLocked) {
             isImageLocked = true
@@ -409,7 +409,7 @@ class FloatingImageService : Service() {
                 imageView?.setOnTouchListener(null)
                 try {
                     windowManager.updateViewLayout(imageRoot, params)
-                    Log.d(TAG, "closeControls: Switched to LOCK mode")
+                    Log.d(tag, "closeControls: Switched to LOCK mode")
                 } catch (_: Throwable) {}
             }
         }
@@ -536,7 +536,7 @@ class FloatingImageService : Service() {
             val right = left + scaledWidth
             val bottom = top + scaledHeight
 
-            // Add some padding for easier touch (20dp margin)
+            // Extra 20 dp of tolerance around the image so it is easier to grab.
             val padding = dp(20).toFloat()
             return x >= (left - padding) && x <= (right + padding) &&
                    y >= (top - padding) && y <= (bottom + padding)
