@@ -631,10 +631,10 @@ class MainActivity : AppCompatActivity() {
             }
             1 -> {
                 title = "How to start overlay"
-                message = "1. Tap the image preview area to select an image from your device\n" +
-                        "2. Tap the START button\n" +
-                        "3. Grant overlay permission when prompted\n" +
-                        "4. The app will minimize and show a small floating icon\n" +
+                message = "1. Tap + to select an image from your device\n" +
+                        "2. Grant overlay permission when prompted\n" +
+                        "3. Tap the image in the list to start the overlay\n" +
+                        "4. The floating icon will appear\n" +
                         "5. Tap the icon to show/hide the image"
             }
             2 -> {
@@ -658,7 +658,7 @@ class MainActivity : AppCompatActivity() {
             4 -> {
                 title = "Controls explanation"
                 message = "• Floating Icon: Tap to show/hide image, long press to edit, drag to move\n" +
-                        "• Opacity Slider: Adjust image transparency (0-100%)\n" +
+                        "• Opacity Slider: Adjust image transparency (0-80%) — Android limits overlay window transparency; even in passthrough mode values above ~80% cause touch/overlay issues\n" +
                         "• Lock Switch: Enable/disable passthrough mode\n" +
                         "• Back Button: Return to icon-only mode\n" +
                         "• Close Button: Stop the overlay completely"
@@ -672,7 +672,8 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("OK", null)
+            .setPositiveButton("Back") { _, _ -> showDocumentation() }
+            .setNegativeButton("Close", null)
             .show()
     }
 
