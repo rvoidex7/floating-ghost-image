@@ -2,15 +2,20 @@ package com.rvoidex7.floatingghostimage
 
 import android.annotation.SuppressLint
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.RectF
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.os.Build
 import android.util.Log
 import android.util.TypedValue
 import android.view.*
@@ -18,6 +23,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.SeekBar
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.graphics.withTranslation
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
 import kotlin.math.*
@@ -25,6 +31,60 @@ import kotlin.math.*
 class FloatingImageService : Service() {
 
     private val tag = "FGI-Floating"
+    private val touchTag = "FGI_TOUCH"
+    private var debugTouchRectView: DebugTouchRectView? = null
+    private var imageGestureActive = false
+
+    private fun logTouch(msg: String) {
+        if (BuildConfig.DEBUG) {
+            Log.d(touchTag, msg)
+        }
+    }
+
+    private inner class DebugTouchRectView(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.RED
+            style = Paint.Style.STROKE
+            strokeWidth = dp(2).toFloat()
+        }
+        private val rect = RectF()
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val img = imageView ?: return
+            val drawable = img.drawable ?: return
+            val viewWidth = img.width.toFloat()
+            val viewHeight = img.height.toFloat()
+            val drawableWidth = drawable.intrinsicWidth.toFloat()
+            val drawableHeight = drawable.intrinsicHeight.toFloat()
+            if (drawableWidth <= 0 || drawableHeight <= 0 || viewWidth <= 0 || viewHeight <= 0) return
+
+            val scaleX = viewWidth / drawableWidth
+            val scaleY = viewHeight / drawableHeight
+            val actualScale = min(scaleX, scaleY)
+
+            val scaledWidth = drawableWidth * actualScale * scale
+            val scaledHeight = drawableHeight * actualScale * scale
+
+            val left = (viewWidth - scaledWidth) / 2f
+            val top = (viewHeight - scaledHeight) / 2f
+            val right = left + scaledWidth
+            val bottom = top + scaledHeight
+            val padding = dp(20).toFloat()
+
+            rect.set(left - padding, top - padding, right + padding, bottom + padding)
+            canvas.withTranslation(img.translationX, img.translationY) {
+                rotate(rotationDeg, img.width / 2f, img.height / 2f)
+                drawRect(rect, paint)
+            }
+        }
+
+        fun update() {
+            if (BuildConfig.DEBUG) {
+                invalidate()
+            }
+        }
+    }
 
     /** Window type shared by every overlay this service adds. */
     private val overlayType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -75,6 +135,7 @@ class FloatingImageService : Service() {
     private var isImageLocked = true
     private var lastImageAlpha = sliderToAlpha(60)
     private var lastImageUri: String? = null
+    private var visualAlpha = sliderToAlpha(60)
 
     // Transform state
     private var scale = 1.0f
@@ -104,7 +165,8 @@ class FloatingImageService : Service() {
             val opacity = it.getIntExtra("opacity", 60).coerceIn(0, 100)
             lastImageUri = uri
             // Slider 0–100 maps to window alpha 0.0–0.8 (MAX_OPACITY).
-            lastImageAlpha = sliderToAlpha(opacity)
+            visualAlpha = sliderToAlpha(opacity)
+            lastImageAlpha = visualAlpha
 
             if (!uri.isNullOrEmpty()) {
                 if (imageRoot == null) {
@@ -114,7 +176,7 @@ class FloatingImageService : Service() {
                 }
 
                 // Apply transforms synchronously (cheap); decode the bitmap off the main thread.
-                // imageView.alpha is fixed at 1.0f — opacity driven by LayoutParams.alpha only.
+                imageView?.alpha = 1.0f
                 imageView?.translationX = translationX
                 imageView?.translationY = translationY
                 imageView?.scaleX = scale
@@ -152,6 +214,8 @@ class FloatingImageService : Service() {
         super.onDestroy()
     }
 
+
+
     /** Full-size setImageURI was a too-large-bitmap / ANR source; decode sampled off-thread. */
     private fun loadImageAsync(uriString: String) {
         val target = max(resources.displayMetrics.widthPixels, resources.displayMetrics.heightPixels)
@@ -188,6 +252,7 @@ class FloatingImageService : Service() {
     }
 
     private val handler = Handler(Looper.getMainLooper())
+    private val imageTouchListener = ImageTouchListener()
 
     // Coalesce updates to once per frame (~60/120fps) without delaying user touch feedback
     private var isAlphaSyncPending = false
@@ -209,8 +274,6 @@ class FloatingImageService : Service() {
         imageRoot = FrameLayout(this)
         imageView = ImageView(this).apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            // Always 1.0f: opacity is driven exclusively by the window's LayoutParams.alpha
-            // to prevent alpha² doubling (view-alpha × window-alpha = squared opacity).
             alpha = 1.0f
         }
 
@@ -219,8 +282,6 @@ class FloatingImageService : Service() {
             FrameLayout.LayoutParams.MATCH_PARENT,
         ))
 
-        // lastImageAlpha is always within 0.0–0.8f (slider 0–100 → 0.0–0.8f),
-        // so no coerceAtMost is needed — same flags/alpha regardless of lock state at init.
         val initialFlags = fullScreenFlags or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
@@ -235,23 +296,41 @@ class FloatingImageService : Service() {
             gravity = Gravity.TOP or Gravity.START
             x = 0
             y = 0
-            // Full-screen scope: let the image reach the status bar, navbar and
-            // notch areas instead of the overlay being inset/clipped there.
-            // (The field is API 28+; the ALWAYS constant is API 30+, hence the R guard.)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 layoutInDisplayCutoutMode =
                     WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             }
-            // Window-level alpha drives all opacity (0.0–0.8f); never exceeds 0.8f.
-            alpha = lastImageAlpha
+            alpha = visualAlpha
         }
 
-        // Touch listener in edit mode, no listener in passthrough mode
-        if (!isImageLocked) {
-            imageView?.setOnTouchListener(ImageTouchListener())
-        } else {
-            imageView?.setOnTouchListener(null)
+        imageRoot?.setOnTouchListener { _, ev ->
+            val locked = isImageLocked
+            val img = imageView
+            if (locked || img == null) {
+                return@setOnTouchListener false
+            }
+            val xIn = ev.x - img.translationX
+            val yIn = ev.y - img.translationY
+            val onImg = isTouchOnDrawable(img, xIn, yIn)
+            logTouch("ROOT|locked=$locked|act=${ev.actionMasked}|onImg=$onImg|active=$imageGestureActive|xy=(${ev.x.toInt()},${ev.y.toInt()})|in=(${xIn.toInt()},${yIn.toInt()})|flags=${imageParams?.flags}|alpha=${imageParams?.alpha}")
+            if (!onImg && !imageGestureActive) {
+                return@setOnTouchListener false
+            }
+            val res = imageTouchListener.onTouch(img, ev)
+            logTouch("ROOT->IMG|locked=$locked|act=${ev.actionMasked}|res=$res|active=$imageGestureActive")
+            return@setOnTouchListener res
         }
+        val rootForDebug = imageRoot
+        if (BuildConfig.DEBUG && rootForDebug != null && debugTouchRectView == null) {
+            val debugView = DebugTouchRectView(this)
+            debugTouchRectView = debugView
+            val lp = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+            debugView.isClickable = false
+            debugView.isFocusable = false
+            rootForDebug.addView(debugView, lp)
+            debugView.update()
+        }
+        imageView?.setOnTouchListener(null)
 
         Log.d(tag, "setupImageWindow: locked=$isImageLocked flags=${imageParams?.flags} alpha=${imageParams?.alpha}")
     }
@@ -296,25 +375,29 @@ class FloatingImageService : Service() {
             val params = imageParams ?: return@setOnCheckedChangeListener
 
             if (checked) {
-                // Passthrough: NOT_TOUCHABLE. lastImageAlpha is already ≤ 0.8f (slider enforces it).
                 params.flags = fullScreenFlags or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                params.alpha = lastImageAlpha
+                params.alpha = visualAlpha
+                imageView?.alpha = 1.0f
                 imageView?.setOnTouchListener(null)
-                Log.d(tag, "Lock ON -> PASSTHROUGH alpha=${params.alpha}")
+                logTouch("MODE|to=LOCKED|flags=${params.flags}|alpha=${params.alpha}")
             } else {
-                // Edit: touchable. Alpha stays the same — no visual jump on mode switch.
-                params.flags = fullScreenFlags or
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                params.alpha = lastImageAlpha
-                imageView?.setOnTouchListener(ImageTouchListener())
-                Log.d(tag, "Lock OFF -> EDIT alpha=${params.alpha}")
+                params.flags = fullScreenFlags or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                val minTouchAlpha = 0.6f
+                if (visualAlpha < minTouchAlpha) {
+                    params.alpha = minTouchAlpha
+                    imageView?.alpha = (visualAlpha / minTouchAlpha).coerceIn(0.01f, 1.0f)
+                } else {
+                    params.alpha = visualAlpha
+                    imageView?.alpha = 1.0f
+                }
+                imageView?.setOnTouchListener(null)
+                logTouch("MODE|to=EDIT|flags=${params.flags}|alpha=${params.alpha}|imgAlpha=${imageView?.alpha}")
             }
 
             try {
                 windowManager.updateViewLayout(imageRoot, params)
-                Log.d(tag, "flags updated=${params.flags} alpha=${params.alpha}")
             } catch (t: Throwable) {
                 Log.e(tag, "Failed to update flags: ${t.message}")
             }
@@ -322,18 +405,30 @@ class FloatingImageService : Service() {
 
         opacitySlider?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                // Map slider 0–100 → window alpha 0.0–MAX_OPACITY (0.8f).
-                // Capping at 0.8f means slider at full = actual visual max (passthrough legal limit).
-                // No coerceAtMost at lock/unlock time → zero visual jump on mode change.
-                // imageView.alpha stays 1.0f to avoid alpha² squaring.
                 val a = sliderToAlpha(progress)
+                visualAlpha = a
                 lastImageAlpha = a
-                imageParams?.alpha = a
+                val params = imageParams ?: return
+                val minTouchAlpha = 0.6f
+                if (!isImageLocked) {
+                    if (a < minTouchAlpha) {
+                        params.alpha = minTouchAlpha
+                        imageView?.alpha = (a / minTouchAlpha).coerceIn(0.01f, 1.0f)
+                    } else {
+                        params.alpha = a
+                        imageView?.alpha = 1.0f
+                    }
+                } else {
+                    params.alpha = a
+                    imageView?.alpha = 1.0f
+                }
+                if (fromUser) {
+                    logTouch("ALPHA|p=$progress|a=$a|locked=$isImageLocked|flags=${params.flags}|winAlpha=${params.alpha}|imgAlpha=${imageView?.alpha}")
+                }
                 requestAlphaSync()
             }
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                // Ensure the final resting value is applied immediately
                 handler.removeCallbacks(alphaSync)
                 isAlphaSyncPending = false
                 alphaSync.run()
@@ -390,14 +485,13 @@ class FloatingImageService : Service() {
         try { windowManager.addView(controlsView, controlsParams); isControlsVisible = true } catch (_: Throwable) {}
         // Sync lock switch and opacity with current state
         controlsView.findViewById<SwitchCompat>(R.id.lock_switch)?.isChecked = isImageLocked
-        controlsView.findViewById<SeekBar>(R.id.opacity_slider)?.progress = alphaToSlider(lastImageAlpha)
+        controlsView.findViewById<SeekBar>(R.id.opacity_slider)?.progress = alphaToSlider(visualAlpha)
     }
 
     private fun closeControls() {
         if (!isControlsVisible) return
 
         // Always switch to lock mode when closing the panel.
-        // No alpha coerce needed: lastImageAlpha is already ≤ 0.8f (slider enforces the range).
         if (!isImageLocked) {
             isImageLocked = true
             val params = imageParams
@@ -405,11 +499,12 @@ class FloatingImageService : Service() {
                 params.flags = fullScreenFlags or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
-                params.alpha = lastImageAlpha
+                params.alpha = visualAlpha
                 imageView?.setOnTouchListener(null)
                 try {
                     windowManager.updateViewLayout(imageRoot, params)
                     Log.d(tag, "closeControls: Switched to LOCK mode")
+                    logTouch("MODE|to=LOCKED|flags=${params.flags}|alpha=${params.alpha}|src=closeControls")
                 } catch (_: Throwable) {}
             }
         }
@@ -436,28 +531,31 @@ class FloatingImageService : Service() {
 
         override fun onTouch(v: View, ev: MotionEvent): Boolean {
             val img = imageView ?: return false
+            if (BuildConfig.DEBUG) Log.d(touchTag, "IMG_TOUCH|act=${ev.actionMasked}|cnt=${ev.pointerCount}|drag=$dragging|scale=$scaling|locked=$isImageLocked")
 
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
-                    // Check if touch is actually on the drawable, not just empty space
-                    if (!isTouchOnDrawable(img, ev.x, ev.y)) {
-                        return false // Let touch pass through to apps below
-                    }
+                    imageGestureActive = true
                     dragging = true
                     scaling = false
                     startTX = img.translationX
                     startTY = img.translationY
                     downRawX = ev.rawX
                     downRawY = ev.rawY
+                    debugTouchRectView?.update()
+                    if (BuildConfig.DEBUG) Log.d(touchTag, "IMG_TOUCH|DOWN|start=($startTX,$startTY)|raw=($downRawX,$downRawY)")
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     if (ev.pointerCount >= 2) {
+                        imageGestureActive = true
                         dragging = false
                         scaling = true
                         startDist = distance(ev)
                         startAngle = angle(ev)
                         startScale = scale
                         startRot = rotationDeg
+                        debugTouchRectView?.update()
+                        if (BuildConfig.DEBUG) Log.d(touchTag, "IMG_TOUCH|P_DOWN|dist=$startDist|ang=$startAngle")
                     }
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -474,6 +572,7 @@ class FloatingImageService : Service() {
                         img.scaleX = scale
                         img.scaleY = scale
                         img.rotation = rotationDeg
+                        debugTouchRectView?.update()
                     } else if (dragging) {
                         val dx = ev.rawX - downRawX
                         val dy = ev.rawY - downRawY
@@ -481,11 +580,43 @@ class FloatingImageService : Service() {
                         translationY = startTY + dy
                         img.translationX = translationX
                         img.translationY = translationY
+                        debugTouchRectView?.update()
                     }
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_POINTER_UP -> {
+                    if (BuildConfig.DEBUG) Log.d(touchTag, "IMG_TOUCH|P_UP|cnt=${ev.pointerCount}|idx=${ev.actionIndex}|drag=$dragging|scale=$scaling|active=$imageGestureActive")
+                    if (scaling && ev.pointerCount == 2) {
+                        val imgV = imageView
+                        if (imgV != null) {
+                            dragging = true
+                            scaling = false
+                            startTX = imgV.translationX
+                            startTY = imgV.translationY
+                            val remaining = if (ev.actionIndex == 0) 1 else 0
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                downRawX = ev.getRawX(remaining)
+                                downRawY = ev.getRawY(remaining)
+                            } else {
+                                downRawX = ev.getX(remaining) + imgV.x
+                                downRawY = ev.getY(remaining) + imgV.y
+                            }
+                            if (BuildConfig.DEBUG) Log.d(touchTag, "IMG_TOUCH|PROMOTE_DRAG|rem=$remaining|raw=($downRawX,$downRawY)")
+                            return true
+                        }
+                    }
+                    if (ev.pointerCount <= 1) {
+                        dragging = false
+                        scaling = false
+                        imageGestureActive = false
+                    } else {
+                        scaling = false
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (BuildConfig.DEBUG) Log.d(touchTag, "IMG_TOUCH|UP/CANCEL|act=${ev.actionMasked}|drag=$dragging|scale=$scaling|active=$imageGestureActive")
                     dragging = false
-                    if (ev.pointerCount <= 2) scaling = false
+                    scaling = false
+                    imageGestureActive = false
                 }
             }
             return true
@@ -512,7 +643,10 @@ class FloatingImageService : Service() {
             return v
         }
 
-        private fun isTouchOnDrawable(v: ImageView, x: Float, y: Float): Boolean {
+
+    }
+
+    private fun isTouchOnDrawable(v: ImageView, x: Float, y: Float): Boolean {
             val drawable = v.drawable ?: return false
 
             val viewWidth = v.width.toFloat()
@@ -541,7 +675,5 @@ class FloatingImageService : Service() {
             return x >= (left - padding) && x <= (right + padding) &&
                    y >= (top - padding) && y <= (bottom + padding)
         }
-    }
-
     private fun dp(v: Int): Int = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).roundToInt()
 }
